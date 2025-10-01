@@ -4,6 +4,22 @@ Remote MCP is a remote [MCP Host](https://modelcontextprotocol.io/specification/
 a web server that serves as an endpoint to generate language-model responses powered by MCP features.
 
 ## Schema
+
+
+
+### GET /servers
+Responds with `McpServerList`
+
+```typescript
+
+interface McpServerListing {
+    serverNames: string[]
+}
+
+```
+
+### POST /generations
+Receives a `GenerationRequest` and responds with a `GenerationResponse`.
 ```typescript
 type Role = "user" | "model";
 

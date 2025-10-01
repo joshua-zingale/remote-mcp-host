@@ -12,15 +12,17 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-type mcpHost struct {
-	sessions []*mcp.ClientSession
+type clientSessionWithName struct {
+	session     *mcp.ClientSession
+	sessionName string
 }
 
-func NewMcpHost(ctx context.Context, config io.Reader) (mcpHost, error) {
-	client := mcp.NewClient(&mcp.Implementation{Name: "mcp-client", Version: "v1.0.0"}, nil)
-	if client == nil {
-		return mcpHost{}, fmt.Errorf("could not initialize new mcp client")
-	}
+type mcpHost struct {
+	client   *mcp.Client
+	sessions map[string]*mcp.ClientSession
+}
+
+func NewMcpHost(ctx context.Context, client *mcp.Client, config io.Reader) (mcpHost, error) {
 
 	sessions, err := loadSessionsFromConfig(client, ctx, config)
 	if err != nil {
@@ -28,68 +30,76 @@ func NewMcpHost(ctx context.Context, config io.Reader) (mcpHost, error) {
 	}
 
 	return mcpHost{
+		client:   client,
 		sessions: sessions,
 	}, nil
 }
 
-func (h *mcpHost) ListAllTools(ctx context.Context) ([]*mcp.Tool, error) {
-	var tools []*mcp.Tool
-
-	for _, s := range h.sessions {
-		res, err := s.ListTools(ctx, nil)
-		if err != nil {
-			return tools, err
-		}
-
-		tools = append(tools, res.Tools...)
-		for res.NextCursor != "" {
-			listToolsParams := mcp.ListToolsParams{
-				Cursor: res.NextCursor,
-			}
-
-			res, err = s.ListTools(ctx, &listToolsParams)
-			if err != nil {
-				return tools, err
-			}
-			tools = append(tools, res.Tools...)
-		}
-
+func (h *mcpHost) ListServerNames() []string {
+	keys := make([]string, 0, len(h.sessions))
+	for k := range h.sessions {
+		keys = append(keys, k)
 	}
-	return tools, nil
+	return keys
 }
 
-func loadSessionsFromConfig(client *mcp.Client, ctx context.Context, r io.Reader) ([]*mcp.ClientSession, error) {
+// Gets a session with a particular name
+func (h *mcpHost) GetClientSession(name string) (*mcp.ClientSession, error) {
+	session, ok := h.sessions[name]
+	if !ok {
+		return session, fmt.Errorf("invalid ClientSession name: %s", name)
+	}
+	return session, nil
+}
+
+func loadSessionsFromConfig(client *mcp.Client, ctx context.Context, r io.Reader) (map[string]*mcp.ClientSession, error) {
 	scanner := bufio.NewScanner(r)
 
-	var sessions []*mcp.ClientSession
+	sessions := make(map[string]*mcp.ClientSession)
 
 	for scanner.Scan() {
-		session, err := sessionFromLine(client, ctx, scanner.Text())
+		sessionWithName, err := sessionFromLine(client, ctx, scanner.Text())
 		if err != nil {
 			return sessions, err
 		}
-		sessions = append(sessions, session)
+
+		if _, exists := sessions[sessionWithName.sessionName]; exists {
+			return sessions, fmt.Errorf("server name conflict: %s", sessionWithName.sessionName)
+		}
+		sessions[sessionWithName.sessionName] = sessionWithName.session
 	}
 
 	return sessions, nil
 }
 
-var stdioRegex = regexp.MustCompile(`^!\[([^\]]+)\]\s*(\S+)\s*(.*)$`)
+var stdioRegex = regexp.MustCompile(`^!\[([^\]]+)\](\[(\w[\w\d-_]*)\])?\s*(\S+)\s*(.*)$`)
 
-func sessionFromLine(client *mcp.Client, ctx context.Context, line string) (*mcp.ClientSession, error) {
+func sessionFromLine(client *mcp.Client, ctx context.Context, line string) (clientSessionWithName, error) {
 	err := fmt.Errorf("invalid line in config: %s", line)
 	if matches := stdioRegex.FindStringSubmatch(line); len(matches) > 0 {
-		command := matches[2]
-		arguments := splitIntoWords(matches[3])
+		command := matches[len(matches)-2]
+		arguments := splitIntoWords(matches[len(matches)-1])
 		cmd := exec.Command(command, arguments...)
 		cmd.Dir = matches[1]
+		sessionName := command
+
+		if matches[3] != "" {
+			sessionName = matches[3]
+		}
 
 		transport := &mcp.CommandTransport{Command: cmd}
-		return client.Connect(ctx, transport, nil)
+		session, err := client.Connect(ctx, transport, nil)
+		if err != nil {
+			return clientSessionWithName{}, err
+		}
+		return clientSessionWithName{
+			session:     session,
+			sessionName: sessionName,
+		}, nil
 
 	}
 
-	return nil, err
+	return clientSessionWithName{}, err
 }
 
 var whiteSpaceRegex = regexp.MustCompile(`\s+`)
