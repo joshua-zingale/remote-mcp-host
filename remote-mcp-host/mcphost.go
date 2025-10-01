@@ -18,21 +18,90 @@ type clientSessionWithName struct {
 }
 
 type mcpHost struct {
-	client   *mcp.Client
-	sessions map[string]*mcp.ClientSession
+	sessions      map[string]*mcp.ClientSession
+	defaultClient *mcp.Client
+	opts          *McpHostOptions
 }
 
-func NewMcpHost(ctx context.Context, client *mcp.Client, config io.Reader) (mcpHost, error) {
+type McpHostOptions struct {
+	Lm LanguageModel
+}
 
-	sessions, err := loadSessionsFromConfig(client, ctx, config)
-	if err != nil {
-		return mcpHost{}, err
+func NewMcpHost(opts *McpHostOptions) (mcpHost, error) {
+	if opts == nil {
+		opts = &McpHostOptions{
+			Lm: GeminiLM{},
+		}
 	}
 
+	client := mcp.NewClient(&mcp.Implementation{Name: "Remote MCP Host Client", Version: "0.1.0"}, nil)
+
 	return mcpHost{
-		client:   client,
-		sessions: sessions,
+		sessions:      make(map[string]*mcp.ClientSession),
+		defaultClient: client,
+		opts:          opts,
 	}, nil
+}
+
+// Generates a new message from the input message history.
+func (h *mcpHost) Generate(ctx context.Context, messages []Message, opts *HostGenerateOptions) (Message, error) {
+	if opts == nil {
+		opts = &HostGenerateOptions{}
+	}
+
+	var parts = make([]UnionPart, 0)
+	for {
+		res, err := h.opts.Lm.Generate(messages, &GenerateOptions{GeneratedParts: parts})
+		if err != nil {
+			return Message{}, err
+		}
+		parts = append(parts, res.Parts...)
+
+		for _, toolRequest := range res.ToolRequests {
+			session, err := h.GetClientSession(toolRequest.Name)
+			if err != nil {
+				return Message{}, err
+			}
+			toolRes, err := session.CallTool(ctx, &toolRequest.CallToolParams)
+			if err != nil {
+				parts = append(parts, UnionPart{NewToolUsePartError(toolRequest.Arguments, err.Error(), ToolId{Name: toolRequest.Name, ServerName: toolRequest.ServerName})})
+			} else {
+				parts = append(parts, UnionPart{NewToolUsePart(toolRequest.Arguments, *toolRes, ToolId{Name: toolRequest.Name, ServerName: toolRequest.ServerName})})
+			}
+
+		}
+
+		if res.Stop {
+			break
+		}
+	}
+
+	return Message{
+		Parts: parts,
+		Role:  "model",
+	}, nil
+}
+
+type HostGenerateOptions struct{}
+
+// Opens MCP sessions with servers for this host.
+// If a client is not specified, the host's default client is used.
+func (h *mcpHost) AddSessionsFromConfig(ctx context.Context, config io.Reader, client *mcp.Client) error {
+	if client == nil {
+		client = h.defaultClient
+	}
+	sessions, err := loadSessionsFromConfig(client, ctx, config)
+	if err != nil {
+		return err
+	}
+
+	for name, session := range sessions {
+		if _, ok := h.sessions[name]; ok {
+			return fmt.Errorf("server name conflict: %s", name)
+		}
+		h.sessions[name] = session
+	}
+	return nil
 }
 
 func (h *mcpHost) ListServerNames() []string {
@@ -43,13 +112,44 @@ func (h *mcpHost) ListServerNames() []string {
 	return keys
 }
 
-// Gets a session with a particular name
+// Gets a session for an MCP server with a particular name
 func (h *mcpHost) GetClientSession(name string) (*mcp.ClientSession, error) {
 	session, ok := h.sessions[name]
 	if !ok {
 		return session, fmt.Errorf("invalid ClientSession name: %s", name)
 	}
 	return session, nil
+}
+
+// Lists all tools for a server that has an open session with this host
+func (h *mcpHost) ListAllTools(ctx context.Context, serverName string) ([]mcp.Tool, error) {
+	session, err := h.GetClientSession(serverName)
+
+	if err != nil {
+		return []mcp.Tool{}, err
+	}
+	if session.InitializeResult().Capabilities.Tools == nil {
+		return []mcp.Tool{}, nil
+	}
+
+	var tools []mcp.Tool
+
+	var cursor string = ""
+	for {
+		res, err := session.ListTools(ctx, &mcp.ListToolsParams{Cursor: cursor})
+		if err != nil {
+			return []mcp.Tool{}, err
+		}
+		for _, tool := range res.Tools {
+			tools = append(tools, *tool)
+		}
+		cursor = res.NextCursor
+		if cursor == "" {
+			break
+		}
+	}
+
+	return tools, nil
 }
 
 func loadSessionsFromConfig(client *mcp.Client, ctx context.Context, r io.Reader) (map[string]*mcp.ClientSession, error) {

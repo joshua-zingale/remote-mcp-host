@@ -13,7 +13,11 @@ Responds with `McpServerList`
 ```typescript
 
 interface McpServerListing {
-    serverNames: string[]
+    name: string
+}
+
+interface McpServerList {
+    servers: McpServerListing
 }
 
 ```
@@ -41,13 +45,18 @@ interface ToolUsePart {
 }
 
 interface Message {
-    content?: Part[]
+    parts?: Part[]
     error?: string
     role: Role
 }
 
+interface ToolId {
+    name: string
+    serverName: string
+}
+
 interface GenerationRequest {
-    availableTools?: string[] // If specified, limits the tools that can be used
+    availableTools?: ToolId[] // If specified, limits the tools that can be used
     messages: Message[]
 }
 

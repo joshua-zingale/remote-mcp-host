@@ -1,8 +1,9 @@
 package remotemcphost
 
 import (
-	"encoding/json"
 	"net/http"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 func NewRemoteMcpMux(host *mcpHost) *http.ServeMux {
@@ -11,27 +12,60 @@ func NewRemoteMcpMux(host *mcpHost) *http.ServeMux {
 		panic("The MCP Host cannot be a null pointer")
 	}
 
-	addMcpHost := func(f func(*mcpHost, http.ResponseWriter, *http.Request)) func(http.ResponseWriter, *http.Request) {
-		return func(w http.ResponseWriter, r *http.Request) {
-			f(host, w, r)
-		}
-	}
-
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /servers/", addMcpHost(getHandleServers))
+
+	mux.HandleFunc("GET /servers", toJson(getServers, host, false))
+	mux.HandleFunc("GET /servers/{name}/tools", toJson(getServerTools, host, false))
+	mux.HandleFunc("POST /generations", toJson(postGenerations, host, true))
 
 	return mux
 }
 
-func getHandleServers(host *mcpHost, w http.ResponseWriter, r *http.Request) {
+func postGenerations(req GenerationRequest, host *mcpHost, r *http.Request) (GenerationResponse, error) {
 
-	w.Header().Set("Content-Type", "application/json")
+	message, err := host.Generate(r.Context(), req.Messages, nil)
 
-	listing := McpServerListing{
-		Servers: host.ListServerNames(),
+	return GenerationResponse{Message: message}, err
+}
+
+func getServers(_ NoBody, host *mcpHost, _ *http.Request) (McpServerList, error) {
+	var list []McpServerListing
+	for _, name := range host.ListServerNames() {
+		list = append(list, McpServerListing{Name: name})
+	}
+	return McpServerList{
+		Servers: list,
+	}, nil
+}
+
+func getServerTools(_ interface{}, host *mcpHost, r *http.Request) (ToolList, error) {
+	name := r.PathValue("name")
+	session, err := host.GetClientSession(name)
+	if err != nil {
+		return ToolList{}, err
+	}
+	if session.InitializeResult().Capabilities.Tools == nil {
+		return ToolList{}, nil
 	}
 
-	listingJson, _ := json.Marshal(listing)
+	var tools []mcp.Tool
 
-	w.Write(listingJson)
+	var cursor string = ""
+	for {
+		res, err := session.ListTools(r.Context(), &mcp.ListToolsParams{Cursor: cursor})
+		if err != nil {
+			return ToolList{}, err
+		}
+		for _, tool := range res.Tools {
+			tools = append(tools, *tool)
+		}
+		cursor = res.NextCursor
+		if cursor == "" {
+			break
+		}
+	}
+
+	return ToolList{
+		Tools: tools,
+	}, nil
 }

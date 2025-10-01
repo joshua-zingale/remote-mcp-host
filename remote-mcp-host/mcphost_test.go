@@ -5,18 +5,17 @@ import (
 	"sort"
 	"strings"
 	"testing"
-
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 func TestNewMcpHost(t *testing.T) {
 	ctx := context.Background()
-	client := mcp.NewClient(&mcp.Implementation{Name: "mcp-client", Version: "v1.0.0"}, nil)
-	host, err := NewMcpHost(ctx, client, strings.NewReader("![../test_servers/greetings] go run greetings.go"))
+	host, err := NewMcpHost(nil)
 
 	if err != nil {
 		t.Fatalf("could not create new host: %s", err)
 	}
+
+	host.AddSessionsFromConfig(ctx, strings.NewReader("![../test_servers/greetings] go run greetings.go"), nil)
 
 	if len(host.sessions) != 1 {
 		t.Fatalf("new host has %d sessions but should have %d", len(host.sessions), 1)
@@ -26,9 +25,9 @@ func TestNewMcpHost(t *testing.T) {
 
 func TestMultipleServers(t *testing.T) {
 	ctx := context.Background()
-	client := mcp.NewClient(&mcp.Implementation{Name: "mcp-client", Version: "v1.0.0"}, nil)
 
-	host, _ := NewMcpHost(ctx, client, strings.NewReader("![../test_servers/greetings][greeter-1] go run greetings.go\n![../test_servers/greetings][greeter-2] go run greetings.go"))
+	host, _ := NewMcpHost(nil)
+	host.AddSessionsFromConfig(ctx, strings.NewReader("![../test_servers/greetings][greeter-1] go run greetings.go\n![../test_servers/greetings][greeter-2] go run greetings.go"), nil)
 
 	names := host.ListServerNames()
 
