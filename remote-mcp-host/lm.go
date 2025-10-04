@@ -13,8 +13,8 @@ type GenerateOptions struct {
 	Tools []*ServerTool
 
 	// The parts already generated for the response
-	// If this is non empty, then the language model should continue
-	// to build on the parts
+	// If this is non-empty, then the language model should continue
+	// to build on the parts.
 	GeneratedParts []UnionPart
 }
 
@@ -34,10 +34,10 @@ type ToolRequest struct {
 	mcp.CallToolParams
 }
 
-type GeminiLM struct {
+type EchoLm struct {
 }
 
-func (lm GeminiLM) Generate(messages []Message, opts *GenerateOptions) (*GenerateResult, error) {
+func (lm EchoLm) Generate(messages []Message, opts *GenerateOptions) (*GenerateResult, error) {
 	text := "nothing to echo"
 	if len(messages) > 0 && len(messages[len(messages)-1].Parts) > 0 {
 		if tp, ok := messages[len(messages)-1].Parts[len(messages[len(messages)-1].Parts)-1].Part.(TextPart); ok {

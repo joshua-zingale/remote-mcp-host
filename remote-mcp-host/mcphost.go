@@ -30,7 +30,7 @@ type McpHostOptions struct {
 func NewMcpHost(opts *McpHostOptions) (mcpHost, error) {
 	if opts == nil {
 		opts = &McpHostOptions{
-			Lm: GeminiLM{},
+			Lm: EchoLm{},
 		}
 	}
 
