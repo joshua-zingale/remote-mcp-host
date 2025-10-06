@@ -50,7 +50,7 @@ func (h *McpHost) Generate(ctx context.Context, messages []api.Message, opts *Ho
 
 	var parts = make([]api.UnionPart, 0)
 	for {
-		res, err := h.agent.Generate(messages, &agent.GenerateOptions{GeneratedParts: parts})
+		res, err := h.agent.Generate(ctx, messages, &agent.GenerateOptions{GeneratedParts: parts})
 		if err != nil {
 			return api.Message{}, err
 		}

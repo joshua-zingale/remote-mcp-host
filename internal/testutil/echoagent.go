@@ -1,6 +1,8 @@
 package testutil
 
 import (
+	"context"
+
 	"github.com/joshua-zingale/remote-mcp-host/remote-mcp-host/agent"
 	"github.com/joshua-zingale/remote-mcp-host/remote-mcp-host/api"
 )
@@ -8,7 +10,7 @@ import (
 type EchoAgent struct {
 }
 
-func (lm EchoAgent) Generate(messages []api.Message, opts *agent.GenerateOptions) (*agent.GenerateResult, error) {
+func (lm EchoAgent) Generate(ctx context.Context, messages []api.Message, opts *agent.GenerateOptions) (*agent.GenerateResult, error) {
 	text := "nothing to echo"
 	if len(messages) > 0 && len(messages[len(messages)-1].Parts) > 0 {
 		if tp, ok := messages[len(messages)-1].Parts[len(messages[len(messages)-1].Parts)-1].Part.(api.TextPart); ok {

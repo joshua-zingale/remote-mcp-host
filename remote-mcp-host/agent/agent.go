@@ -1,6 +1,8 @@
 package agent
 
 import (
+	"context"
+
 	"github.com/joshua-zingale/remote-mcp-host/remote-mcp-host/api"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -13,7 +15,7 @@ type Agent interface {
 	// If GenerateResult.Stop is not set to true, the generate function
 	// may be called again before the new message is finalized and sent
 	// to the user
-	Generate([]api.Message, *GenerateOptions) (*GenerateResult, error)
+	Generate(context.Context, []api.Message, *GenerateOptions) (*GenerateResult, error)
 }
 
 type GenerateOptions struct {
