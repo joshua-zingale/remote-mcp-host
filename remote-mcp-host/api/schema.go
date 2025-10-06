@@ -45,9 +45,14 @@ type ToolId struct {
 	ServerName string `json:"serverName"`
 }
 
+type ToolConfig struct {
+	ToolId ToolId `json:"toolId"`
+	// Arguments any    `json:"arguments"`
+}
+
 type GenerationRequest struct {
-	AvailableTools []ToolId  `json:"availableTools,omitempty"`
-	Messages       []Message `json:"messages"`
+	AvailableTools []ToolConfig `json:"availableTools,omitempty"`
+	Messages       []Message    `json:"messages"`
 }
 
 type GenerationResponse struct {
