@@ -18,7 +18,7 @@ func (lm EchoAgent) Generate(ctx context.Context, messages []api.Message, opts *
 		}
 	}
 	return &agent.GenerateResult{
-		Parts: []api.UnionPart{{Part: api.NewTextPart(text)}},
-		Stop:  true,
+		Parts:    []api.UnionPart{{Part: api.NewTextPart(text)}},
+		Continue: false,
 	}, nil
 }

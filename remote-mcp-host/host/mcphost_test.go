@@ -13,7 +13,7 @@ import (
 
 func TestNewMcpHost(t *testing.T) {
 	ctx := context.Background()
-	host, err := NewMcpHost(testutil.EchoAgent{}, nil)
+	host, err := NewMcpHost(&testutil.EchoAgent{}, nil)
 
 	if err != nil {
 		t.Fatalf("could not create new host: %s", err)

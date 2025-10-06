@@ -5,15 +5,22 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/joshua-zingale/remote-mcp-host/internal/testutil"
 	"github.com/joshua-zingale/remote-mcp-host/remote-mcp-host/host"
+	"github.com/joshua-zingale/remote-mcp-host/remote-mcp-host/impl"
 	"github.com/joshua-zingale/remote-mcp-host/remote-mcp-host/server"
 )
 
 func main() {
 
 	ctx := context.Background()
-	McpHost, err := host.NewMcpHost(testutil.EchoAgent{}, nil)
+
+	client, err := impl.NewGeminiAgent(ctx, nil)
+
+	if err != nil {
+		panic(err)
+	}
+
+	McpHost, err := host.NewMcpHost(client, nil)
 	if err != nil {
 		panic(err)
 	}

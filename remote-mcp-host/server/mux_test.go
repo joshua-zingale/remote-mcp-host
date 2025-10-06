@@ -17,7 +17,7 @@ import (
 func TestServerListing(t *testing.T) {
 	ctx := context.Background()
 
-	host, _ := host.NewMcpHost(testutil.EchoAgent{}, nil)
+	host, _ := host.NewMcpHost(&testutil.EchoAgent{}, nil)
 	host.AddSessionsFromConfig(ctx, strings.NewReader("![../../test_servers/greetings][greetings] go run greetings.go"), nil)
 
 	mux := NewRemoteMcpMux(&host)

@@ -70,7 +70,7 @@ func (h *McpHost) Generate(ctx context.Context, messages []api.Message, opts *Ho
 
 		}
 
-		if res.Stop {
+		if !res.Continue {
 			break
 		}
 	}

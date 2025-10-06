@@ -12,7 +12,7 @@ type Agent interface {
 	// The messages should be ordered from oldest to newest.
 	// The options may be null, in which case default values should be used.
 	//
-	// If GenerateResult.Stop is not set to true, the generate function
+	// If GenerateResult.Continue is set to true, the generate function
 	// may be called again before the new message is finalized and sent
 	// to the user
 	Generate(context.Context, []api.Message, *GenerateOptions) (*GenerateResult, error)
@@ -37,7 +37,7 @@ type ServerTool struct {
 type GenerateResult struct {
 	Parts        []api.UnionPart
 	ToolRequests []ToolRequest
-	Stop         bool
+	Continue     bool
 }
 
 type ToolRequest struct {
