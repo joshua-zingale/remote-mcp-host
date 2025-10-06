@@ -1,7 +1,7 @@
 package testutil
 
 import (
-	agent "github.com/joshua-zingale/remote-mcp-host/remote-mcp-host/Agent"
+	"github.com/joshua-zingale/remote-mcp-host/remote-mcp-host/agent"
 	"github.com/joshua-zingale/remote-mcp-host/remote-mcp-host/api"
 )
 

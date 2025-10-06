@@ -9,7 +9,7 @@ import (
 	"regexp"
 	"strings"
 
-	agent "github.com/joshua-zingale/remote-mcp-host/remote-mcp-host/Agent"
+	"github.com/joshua-zingale/remote-mcp-host/remote-mcp-host/agent"
 	"github.com/joshua-zingale/remote-mcp-host/remote-mcp-host/api"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
