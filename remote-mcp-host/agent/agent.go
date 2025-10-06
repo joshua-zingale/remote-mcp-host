@@ -1,8 +1,11 @@
-package remotemcphost
+package agent
 
-import "github.com/modelcontextprotocol/go-sdk/mcp"
+import (
+	"github.com/joshua-zingale/remote-mcp-host/remote-mcp-host/api"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+)
 
-type LanguageModel interface {
+type Agent interface {
 	// Completes text.
 	// The messages should be ordered from oldest to newest.
 	// The options may be null, in which case default values should be used.
@@ -10,16 +13,18 @@ type LanguageModel interface {
 	// If GenerateResult.Stop is not set to true, the generate function
 	// may be called again before the new message is finalized and sent
 	// to the user
-	Generate([]Message, *GenerateOptions) (*GenerateResult, error)
+	Generate([]api.Message, *GenerateOptions) (*GenerateResult, error)
 }
 
 type GenerateOptions struct {
+
+	// The list of tools that are available for the Agent.
 	Tools []*ServerTool
 
 	// The parts already generated for the response
 	// If this is non-empty, then the language model should continue
 	// to build on the parts.
-	GeneratedParts []UnionPart
+	GeneratedParts []api.UnionPart
 }
 
 type ServerTool struct {
@@ -28,7 +33,7 @@ type ServerTool struct {
 }
 
 type GenerateResult struct {
-	Parts        []UnionPart
+	Parts        []api.UnionPart
 	ToolRequests []ToolRequest
 	Stop         bool
 }
@@ -36,20 +41,4 @@ type GenerateResult struct {
 type ToolRequest struct {
 	ServerName string
 	mcp.CallToolParams
-}
-
-type EchoLm struct {
-}
-
-func (lm EchoLm) Generate(messages []Message, opts *GenerateOptions) (*GenerateResult, error) {
-	text := "nothing to echo"
-	if len(messages) > 0 && len(messages[len(messages)-1].Parts) > 0 {
-		if tp, ok := messages[len(messages)-1].Parts[len(messages[len(messages)-1].Parts)-1].Part.(TextPart); ok {
-			text = "Echo: " + tp.Text
-		}
-	}
-	return &GenerateResult{
-		Parts: []UnionPart{{Part: NewTextPart(text)}},
-		Stop:  true,
-	}, nil
 }

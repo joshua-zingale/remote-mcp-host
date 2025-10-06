@@ -1,4 +1,4 @@
-package remotemcphost
+package server
 
 import (
 	"context"
@@ -8,13 +8,17 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/joshua-zingale/remote-mcp-host/internal/testutil"
+	"github.com/joshua-zingale/remote-mcp-host/remote-mcp-host/api"
+	"github.com/joshua-zingale/remote-mcp-host/remote-mcp-host/host"
 )
 
 func TestServerListing(t *testing.T) {
 	ctx := context.Background()
 
-	host, _ := NewMcpHost(&McpHostOptions{Lm: echoLm{}})
-	host.AddSessionsFromConfig(ctx, strings.NewReader("![../test_servers/greetings][greetings] go run greetings.go"), nil)
+	host, _ := host.NewMcpHost(testutil.EchoAgent{}, nil)
+	host.AddSessionsFromConfig(ctx, strings.NewReader("![../../test_servers/greetings][greetings] go run greetings.go"), nil)
 
 	mux := NewRemoteMcpMux(&host)
 	r := httptest.NewRequest("GET", "/servers", nil)
@@ -26,7 +30,7 @@ func TestServerListing(t *testing.T) {
 	if res.StatusCode != http.StatusOK {
 		t.Errorf("expected status OK; got %v", res.Status)
 	}
-	var listing McpServerList
+	var listing api.McpServerList
 	json.NewDecoder(res.Body).Decode(&listing)
 
 	if len(listing.Servers) != 1 {
@@ -40,15 +44,15 @@ func TestServerListing(t *testing.T) {
 func TestServerGenerate(t *testing.T) {
 	ctx := context.Background()
 
-	host, _ := NewMcpHost(&McpHostOptions{Lm: echoLm{}})
-	host.AddSessionsFromConfig(ctx, strings.NewReader("![../test_servers/greetings][greetings] go run greetings.go"), nil)
+	host, _ := host.NewMcpHost(testutil.EchoAgent{}, nil)
+	host.AddSessionsFromConfig(ctx, strings.NewReader("![../../test_servers/greetings][greetings] go run greetings.go"), nil)
 
 	mux := NewRemoteMcpMux(&host)
 
-	req, _ := json.Marshal(GenerationRequest{
-		Messages: []Message{{
+	req, _ := json.Marshal(api.GenerationRequest{
+		Messages: []api.Message{{
 			Role:  "user",
-			Parts: []UnionPart{{NewTextPart("hello, world")}},
+			Parts: []api.UnionPart{{Part: api.NewTextPart("hello, world")}},
 		}},
 	})
 
@@ -63,7 +67,7 @@ func TestServerGenerate(t *testing.T) {
 		body, _ := io.ReadAll(res.Body)
 		t.Errorf("expected status OK; got %v with body '%s'", res.Status, body)
 	}
-	var genRes GenerationResponse
+	var genRes api.GenerationResponse
 	err := json.NewDecoder(res.Body).Decode(&genRes)
 
 	if err != nil {
@@ -77,23 +81,7 @@ func TestServerGenerate(t *testing.T) {
 	if len(genRes.Message.Parts) == 0 {
 		t.Fatalf("Expected the response to have at least one part but had none")
 	}
-	if tp, ok := genRes.Message.Parts[0].Part.(TextPart); !ok || tp.Text != "hello, world" {
+	if tp, ok := genRes.Message.Parts[0].Part.(api.TextPart); !ok || tp.Text != "hello, world" {
 		t.Fatalf("Expected the response have a text part containing \"hello, world\" as its first part, but it did not. Instead found %v", genRes.Message)
 	}
-}
-
-type echoLm struct {
-}
-
-func (lm echoLm) Generate(messages []Message, opts *GenerateOptions) (*GenerateResult, error) {
-	text := "nothing to echo"
-	if len(messages) > 0 && len(messages[len(messages)-1].Parts) > 0 {
-		if tp, ok := messages[len(messages)-1].Parts[len(messages[len(messages)-1].Parts)-1].Part.(TextPart); ok {
-			text = tp.Text
-		}
-	}
-	return &GenerateResult{
-		Parts: []UnionPart{{Part: NewTextPart(text)}},
-		Stop:  true,
-	}, nil
 }

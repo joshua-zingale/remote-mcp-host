@@ -1,4 +1,4 @@
-package remotemcphost
+package host
 
 import (
 	"context"
@@ -7,17 +7,19 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/joshua-zingale/remote-mcp-host/internal/testutil"
 )
 
 func TestNewMcpHost(t *testing.T) {
 	ctx := context.Background()
-	host, err := NewMcpHost(nil)
+	host, err := NewMcpHost(testutil.EchoAgent{}, nil)
 
 	if err != nil {
 		t.Fatalf("could not create new host: %s", err)
 	}
 
-	host.AddSessionsFromConfig(ctx, strings.NewReader("![../test_servers/greetings] go run greetings.go"), nil)
+	host.AddSessionsFromConfig(ctx, strings.NewReader("![../../test_servers/greetings] go run greetings.go"), nil)
 
 	if len(host.sessions) != 1 {
 		t.Fatalf("new host has %d sessions but should have %d", len(host.sessions), 1)
@@ -28,8 +30,8 @@ func TestNewMcpHost(t *testing.T) {
 func TestMultipleServers(t *testing.T) {
 	ctx := context.Background()
 
-	host, _ := NewMcpHost(nil)
-	host.AddSessionsFromConfig(ctx, strings.NewReader("![../test_servers/greetings][greeter-1] go run greetings.go\n![../test_servers/greetings][greeter-2] go run greetings.go"), nil)
+	host, _ := NewMcpHost(testutil.EchoAgent{}, nil)
+	host.AddSessionsFromConfig(ctx, strings.NewReader("![../../test_servers/greetings][greeter-1] go run greetings.go\n![../../test_servers/greetings][greeter-2] go run greetings.go"), nil)
 
 	names := host.ListServerNames()
 
@@ -65,11 +67,15 @@ func TestMultipleServers(t *testing.T) {
 func TestHttpServer(t *testing.T) {
 	ctx := context.Background()
 
-	host, _ := NewMcpHost(nil)
+	host, _ := NewMcpHost(testutil.EchoAgent{}, nil)
 
 	cmd := exec.Command("go", "run", "httpmath.go")
-	cmd.Dir = "../test_servers/httpmath/"
-	cmd.Start()
+	cmd.Dir = "../../test_servers/httpmath/"
+	err := cmd.Start()
+
+	if err != nil {
+		t.Fatalf("Could not start http server")
+	}
 
 	time.Sleep(200 * time.Millisecond)
 

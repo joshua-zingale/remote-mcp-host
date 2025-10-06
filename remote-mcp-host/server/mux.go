@@ -1,12 +1,14 @@
-package remotemcphost
+package server
 
 import (
 	"net/http"
 
+	"github.com/joshua-zingale/remote-mcp-host/remote-mcp-host/api"
+	"github.com/joshua-zingale/remote-mcp-host/remote-mcp-host/host"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-func NewRemoteMcpMux(host *mcpHost) *http.ServeMux {
+func NewRemoteMcpMux(host *host.McpHost) *http.ServeMux {
 
 	if host == nil {
 		panic("The MCP Host cannot be a null pointer")
@@ -21,31 +23,31 @@ func NewRemoteMcpMux(host *mcpHost) *http.ServeMux {
 	return mux
 }
 
-func postGenerations(req GenerationRequest, host *mcpHost, r *http.Request) (GenerationResponse, error) {
+func postGenerations(req api.GenerationRequest, host *host.McpHost, r *http.Request) (api.GenerationResponse, error) {
 
 	message, err := host.Generate(r.Context(), req.Messages, nil)
 
-	return GenerationResponse{Message: message}, err
+	return api.GenerationResponse{Message: message}, err
 }
 
-func getServers(_ noBody, host *mcpHost, _ *http.Request) (McpServerList, error) {
-	var list []McpServerListing
+func getServers(_ noBody, host *host.McpHost, _ *http.Request) (api.McpServerList, error) {
+	var list []api.McpServerListing
 	for _, name := range host.ListServerNames() {
-		list = append(list, McpServerListing{Name: name})
+		list = append(list, api.McpServerListing{Name: name})
 	}
-	return McpServerList{
+	return api.McpServerList{
 		Servers: list,
 	}, nil
 }
 
-func getServerTools(_ interface{}, host *mcpHost, r *http.Request) (ToolList, error) {
+func getServerTools(_ interface{}, host *host.McpHost, r *http.Request) (api.ToolList, error) {
 	name := r.PathValue("name")
 	session, err := host.GetClientSession(name)
 	if err != nil {
-		return ToolList{}, err
+		return api.ToolList{}, err
 	}
 	if session.InitializeResult().Capabilities.Tools == nil {
-		return ToolList{}, nil
+		return api.ToolList{}, nil
 	}
 
 	var tools []mcp.Tool
@@ -54,7 +56,7 @@ func getServerTools(_ interface{}, host *mcpHost, r *http.Request) (ToolList, er
 	for {
 		res, err := session.ListTools(r.Context(), &mcp.ListToolsParams{Cursor: cursor})
 		if err != nil {
-			return ToolList{}, err
+			return api.ToolList{}, err
 		}
 		for _, tool := range res.Tools {
 			tools = append(tools, *tool)
@@ -65,7 +67,7 @@ func getServerTools(_ interface{}, host *mcpHost, r *http.Request) (ToolList, er
 		}
 	}
 
-	return ToolList{
+	return api.ToolList{
 		Tools: tools,
 	}, nil
 }

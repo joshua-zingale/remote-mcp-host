@@ -1,4 +1,4 @@
-package remotemcphost
+package host
 
 import (
 	"bufio"
@@ -9,6 +9,8 @@ import (
 	"regexp"
 	"strings"
 
+	agent "github.com/joshua-zingale/remote-mcp-host/remote-mcp-host/Agent"
+	"github.com/joshua-zingale/remote-mcp-host/remote-mcp-host/api"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -17,56 +19,53 @@ type clientSessionWithName struct {
 	sessionName string
 }
 
-type mcpHost struct {
+type McpHost struct {
 	sessions      map[string]*mcp.ClientSession
 	defaultClient *mcp.Client
+	agent         agent.Agent
 	opts          *McpHostOptions
 }
 
 type McpHostOptions struct {
-	Lm LanguageModel
+	_ bool
 }
 
-func NewMcpHost(opts *McpHostOptions) (mcpHost, error) {
-	if opts == nil {
-		opts = &McpHostOptions{
-			Lm: EchoLm{},
-		}
-	}
+func NewMcpHost(agent agent.Agent, _ *McpHostOptions) (McpHost, error) {
 
 	client := mcp.NewClient(&mcp.Implementation{Name: "Remote MCP Host Client", Version: "0.1.0"}, nil)
 
-	return mcpHost{
+	return McpHost{
 		sessions:      make(map[string]*mcp.ClientSession),
 		defaultClient: client,
-		opts:          opts,
+		agent:         agent,
+		opts:          nil,
 	}, nil
 }
 
 // Generates a new message from the input message history.
-func (h *mcpHost) Generate(ctx context.Context, messages []Message, opts *HostGenerateOptions) (Message, error) {
+func (h *McpHost) Generate(ctx context.Context, messages []api.Message, opts *HostGenerateOptions) (api.Message, error) {
 	if opts == nil {
 		opts = &HostGenerateOptions{}
 	}
 
-	var parts = make([]UnionPart, 0)
+	var parts = make([]api.UnionPart, 0)
 	for {
-		res, err := h.opts.Lm.Generate(messages, &GenerateOptions{GeneratedParts: parts})
+		res, err := h.agent.Generate(messages, &agent.GenerateOptions{GeneratedParts: parts})
 		if err != nil {
-			return Message{}, err
+			return api.Message{}, err
 		}
 		parts = append(parts, res.Parts...)
 
 		for _, toolRequest := range res.ToolRequests {
 			session, err := h.GetClientSession(toolRequest.Name)
 			if err != nil {
-				return Message{}, err
+				return api.Message{}, err
 			}
 			toolRes, err := session.CallTool(ctx, &toolRequest.CallToolParams)
 			if err != nil {
-				parts = append(parts, UnionPart{NewToolUsePartError(toolRequest.Arguments, err.Error(), ToolId{Name: toolRequest.Name, ServerName: toolRequest.ServerName})})
+				parts = append(parts, api.UnionPart{Part: api.NewToolUsePartError(toolRequest.Arguments, err.Error(), api.ToolId{Name: toolRequest.Name, ServerName: toolRequest.ServerName})})
 			} else {
-				parts = append(parts, UnionPart{NewToolUsePart(toolRequest.Arguments, *toolRes, ToolId{Name: toolRequest.Name, ServerName: toolRequest.ServerName})})
+				parts = append(parts, api.UnionPart{Part: api.NewToolUsePart(toolRequest.Arguments, *toolRes, api.ToolId{Name: toolRequest.Name, ServerName: toolRequest.ServerName})})
 			}
 
 		}
@@ -76,7 +75,7 @@ func (h *mcpHost) Generate(ctx context.Context, messages []Message, opts *HostGe
 		}
 	}
 
-	return Message{
+	return api.Message{
 		Parts: parts,
 		Role:  "model",
 	}, nil
@@ -86,7 +85,7 @@ type HostGenerateOptions struct{}
 
 // Opens MCP sessions with servers for this host.
 // If a client is not specified, the host's default client is used.
-func (h *mcpHost) AddSessionsFromConfig(ctx context.Context, config io.Reader, client *mcp.Client) error {
+func (h *McpHost) AddSessionsFromConfig(ctx context.Context, config io.Reader, client *mcp.Client) error {
 	if client == nil {
 		client = h.defaultClient
 	}
@@ -104,7 +103,7 @@ func (h *mcpHost) AddSessionsFromConfig(ctx context.Context, config io.Reader, c
 	return nil
 }
 
-func (h *mcpHost) ListServerNames() []string {
+func (h *McpHost) ListServerNames() []string {
 	keys := make([]string, 0, len(h.sessions))
 	for k := range h.sessions {
 		keys = append(keys, k)
@@ -113,7 +112,7 @@ func (h *mcpHost) ListServerNames() []string {
 }
 
 // Gets a session for an MCP server with a particular name
-func (h *mcpHost) GetClientSession(name string) (*mcp.ClientSession, error) {
+func (h *McpHost) GetClientSession(name string) (*mcp.ClientSession, error) {
 	session, ok := h.sessions[name]
 	if !ok {
 		return session, fmt.Errorf("invalid ClientSession name: %s", name)
@@ -122,7 +121,7 @@ func (h *mcpHost) GetClientSession(name string) (*mcp.ClientSession, error) {
 }
 
 // Lists all tools for a server that has an open session with this host
-func (h *mcpHost) ListAllTools(ctx context.Context, serverName string) ([]mcp.Tool, error) {
+func (h *McpHost) ListAllTools(ctx context.Context, serverName string) ([]mcp.Tool, error) {
 	session, err := h.GetClientSession(serverName)
 
 	if err != nil {

@@ -1,4 +1,4 @@
-package remotemcphost
+package api
 
 import (
 	"encoding/json"
