@@ -6,6 +6,10 @@ type LanguageModel interface {
 	// Completes text.
 	// The messages should be ordered from oldest to newest.
 	// The options may be null, in which case default values should be used.
+	//
+	// If GenerateResult.Stop is not set to true, the generate function
+	// may be called again before the new message is finalized and sent
+	// to the user
 	Generate([]Message, *GenerateOptions) (*GenerateResult, error)
 }
 
@@ -41,7 +45,7 @@ func (lm EchoLm) Generate(messages []Message, opts *GenerateOptions) (*GenerateR
 	text := "nothing to echo"
 	if len(messages) > 0 && len(messages[len(messages)-1].Parts) > 0 {
 		if tp, ok := messages[len(messages)-1].Parts[len(messages[len(messages)-1].Parts)-1].Part.(TextPart); ok {
-			text = tp.Text
+			text = "Echo: " + tp.Text
 		}
 	}
 	return &GenerateResult{

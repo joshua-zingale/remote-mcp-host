@@ -173,9 +173,9 @@ func loadSessionsFromConfig(client *mcp.Client, ctx context.Context, r io.Reader
 }
 
 var stdioRegex = regexp.MustCompile(`^!\[([^\]]+)\](\[(\w[\w\d-_]*)\])?\s*(\S+)\s*(.*)$`)
+var httpRegex = regexp.MustCompile(`^>\[(\w[\w\d-_]*)\]\s*(http://.+)$`)
 
 func sessionFromLine(client *mcp.Client, ctx context.Context, line string) (clientSessionWithName, error) {
-	err := fmt.Errorf("invalid line in config: %s", line)
 	if matches := stdioRegex.FindStringSubmatch(line); len(matches) > 0 {
 		command := matches[len(matches)-2]
 		arguments := splitIntoWords(matches[len(matches)-1])
@@ -197,9 +197,22 @@ func sessionFromLine(client *mcp.Client, ctx context.Context, line string) (clie
 			sessionName: sessionName,
 		}, nil
 
+	} else if matches := httpRegex.FindStringSubmatch(line); len(matches) > 0 {
+		sessionName := matches[1]
+		url := matches[2]
+
+		session, err := client.Connect(ctx, &mcp.StreamableClientTransport{Endpoint: url}, nil)
+		if err != nil {
+			return clientSessionWithName{}, err
+		}
+
+		return clientSessionWithName{
+			session:     session,
+			sessionName: sessionName,
+		}, nil
 	}
 
-	return clientSessionWithName{}, err
+	return clientSessionWithName{}, fmt.Errorf("invalid line in config: %s", line)
 }
 
 var whiteSpaceRegex = regexp.MustCompile(`\s+`)

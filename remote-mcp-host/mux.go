@@ -28,7 +28,7 @@ func postGenerations(req GenerationRequest, host *mcpHost, r *http.Request) (Gen
 	return GenerationResponse{Message: message}, err
 }
 
-func getServers(_ NoBody, host *mcpHost, _ *http.Request) (McpServerList, error) {
+func getServers(_ noBody, host *mcpHost, _ *http.Request) (McpServerList, error) {
 	var list []McpServerListing
 	for _, name := range host.ListServerNames() {
 		list = append(list, McpServerListing{Name: name})

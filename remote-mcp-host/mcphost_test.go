@@ -2,9 +2,11 @@ package remotemcphost
 
 import (
 	"context"
+	"os/exec"
 	"sort"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestNewMcpHost(t *testing.T) {
@@ -32,7 +34,7 @@ func TestMultipleServers(t *testing.T) {
 	names := host.ListServerNames()
 
 	if len(names) != 2 {
-		t.Fatalf("expected 2 tool(s) but %d tool(s) found", len(names))
+		t.Fatalf("expected 2 server(s) but %d server(s) found", len(names))
 	}
 
 	sort.Slice(names, func(i, j int) bool {
@@ -58,4 +60,34 @@ func TestMultipleServers(t *testing.T) {
 		t.Fatalf("greeter-2's tool not added")
 	}
 
+}
+
+func TestHttpServer(t *testing.T) {
+	ctx := context.Background()
+
+	host, _ := NewMcpHost(nil)
+
+	cmd := exec.Command("go", "run", "httpmath.go")
+	cmd.Dir = "../test_servers/httpmath/"
+	cmd.Start()
+
+	time.Sleep(200 * time.Millisecond)
+
+	host.AddSessionsFromConfig(ctx, strings.NewReader(">[httpmath] http://127.0.0.1:8080"), nil)
+
+	names := host.ListServerNames()
+
+	if len(names) != 1 {
+		t.Fatalf("expected 1 server(s) but %d server(s) found", len(names))
+	}
+
+	if names[0] != "httpmath" {
+		t.Fatalf("httpmath not added to server properly")
+	}
+
+	session, _ := host.GetClientSession("httpmath")
+	tools, _ := session.ListTools(ctx, nil)
+	if tools.Tools[0].Name != "add" {
+		t.Fatalf("greeter-1's tool not added")
+	}
 }
