@@ -15,54 +15,20 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-type clientSessionWithName struct {
-	session     *mcp.ClientSession
-	sessionName string
-}
-
-type McpHost struct {
-	sessions      map[string]*mcp.ClientSession
-	defaultClient *mcp.Client
-	agent         agent.Agent
-	opts          *McpHostOptions
-}
-
-type McpHostOptions struct {
-	_ bool
-}
-
-func NewMcpHost(agent agent.Agent, _ *McpHostOptions) (McpHost, error) {
+func NewMcpHost(_ *McpHostOptions) (McpHost, error) {
 
 	client := mcp.NewClient(&mcp.Implementation{Name: "Remote MCP Host Client", Version: "0.1.0"}, nil)
 
 	return McpHost{
 		sessions:      make(map[string]*mcp.ClientSession),
 		defaultClient: client,
-		agent:         agent,
 		opts:          nil,
 	}, nil
 }
 
-func (h *McpHost) allTools(ctx context.Context) ([]*api.ToolConfig, error) {
-	var availableTools []*api.ToolConfig
-
-	for tool, err := range h.Tools(ctx) {
-		if err != nil {
-			return availableTools, err
-		}
-		availableTools = append(availableTools, &api.ToolConfig{
-			ToolId: api.ToolId{
-				ServerName: tool.ServerName,
-				Name:       tool.Name,
-			}})
-	}
-
-	return availableTools, nil
-}
-
-func (h *McpHost) GetClientWithFeatures(ctx context.Context, opts *ClientFeatures) (agent.McpClient, error) {
+func (h *McpHost) GetClient(ctx context.Context, opts *ClientOptions) (agent.McpClient, error) {
 	if opts == nil {
-		opts = &ClientFeatures{}
+		opts = &ClientOptions{}
 	}
 
 	if opts.AvailableTools == nil {
@@ -74,30 +40,6 @@ func (h *McpHost) GetClientWithFeatures(ctx context.Context, opts *ClientFeature
 	}
 	return HostMcpClient{host: h, opts: opts}, nil
 }
-
-// Generates a new message from the input message history.
-func (h *McpHost) Generate(ctx context.Context, messages []api.Message, opts *HostGenerateOptions) (*api.Message, error) {
-	if opts == nil {
-		opts = &HostGenerateOptions{}
-	}
-
-	client, err := h.GetClientWithFeatures(ctx, nil)
-	if err != nil {
-		return nil, fmt.Errorf("could not create client: %s", err)
-	}
-
-	res, err := h.agent.Generate(ctx, messages, client, &agent.GenerateOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("generating response: %s", err)
-	}
-
-	return &api.Message{
-		Parts: res.Parts,
-		Role:  "model",
-	}, nil
-}
-
-type HostGenerateOptions struct{}
 
 // Opens MCP sessions with servers for this host.
 // If a client is not specified, the host's default client is used.
@@ -128,7 +70,7 @@ func (h *McpHost) ListServerNames() []string {
 }
 
 // Gets a session for an MCP server with a particular name
-func (h *McpHost) GetClientSession(ctx context.Context, name string) (*mcp.ClientSession, error) {
+func (h *McpHost) GetSession(ctx context.Context, name string) (*mcp.ClientSession, error) {
 	session, ok := h.sessions[name]
 	if !ok {
 		return session, fmt.Errorf("invalid ClientSession name: %s", name)
@@ -139,7 +81,7 @@ func (h *McpHost) GetClientSession(ctx context.Context, name string) (*mcp.Clien
 func (h *McpHost) Tools(ctx context.Context) iter.Seq2[*agent.ServerTool, error] {
 	return func(yield func(*agent.ServerTool, error) bool) {
 		for _, serverName := range h.ListServerNames() {
-			session, err := h.GetClientSession(ctx, serverName)
+			session, err := h.GetSession(ctx, serverName)
 			if err != nil {
 				yield(nil, err)
 				return
@@ -160,7 +102,7 @@ func (h *McpHost) Tools(ctx context.Context) iter.Seq2[*agent.ServerTool, error]
 
 // Lists all tools for a server that has an open session with this host
 func (h *McpHost) ListToolsOnServer(ctx context.Context, serverName string) ([]mcp.Tool, error) {
-	session, err := h.GetClientSession(ctx, serverName)
+	session, err := h.GetSession(ctx, serverName)
 
 	if err != nil {
 		return nil, err
@@ -181,17 +123,8 @@ func (h *McpHost) ListToolsOnServer(ctx context.Context, serverName string) ([]m
 	return tools, nil
 }
 
-type ClientFeatures struct {
-	AvailableTools []*api.ToolConfig
-}
-
-type HostMcpClient struct {
-	host *McpHost
-	opts *ClientFeatures
-}
-
 func (hmc HostMcpClient) CallTool(ctx context.Context, toolRequest *agent.ServerToolRequest) (*api.ToolUsePart, error) {
-	session, err := hmc.host.GetClientSession(ctx, toolRequest.ServerName)
+	session, err := hmc.host.GetSession(ctx, toolRequest.ServerName)
 	if err != nil {
 		return nil, fmt.Errorf("could not connect to session '%s': %s", toolRequest.ServerName, err)
 	}
@@ -228,6 +161,23 @@ func (hmc HostMcpClient) ListTools(ctx context.Context) ([]*agent.ServerTool, er
 		}
 	}
 	return serverTools, nil
+}
+
+func (h *McpHost) allTools(ctx context.Context) ([]*api.ToolConfig, error) {
+	var availableTools []*api.ToolConfig
+
+	for tool, err := range h.Tools(ctx) {
+		if err != nil {
+			return availableTools, err
+		}
+		availableTools = append(availableTools, &api.ToolConfig{
+			ToolId: api.ToolId{
+				ServerName: tool.ServerName,
+				Name:       tool.Name,
+			}})
+	}
+
+	return availableTools, nil
 }
 
 func loadSessionsFromConfig(client *mcp.Client, ctx context.Context, r io.Reader) (map[string]*mcp.ClientSession, error) {

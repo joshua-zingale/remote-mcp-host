@@ -10,7 +10,7 @@ import (
 type EchoAgent struct {
 }
 
-func (lm EchoAgent) Generate(ctx context.Context, messages []api.Message, _ agent.McpClient, opts *agent.GenerateOptions) (*agent.GenerateResult, error) {
+func (lm EchoAgent) Act(ctx context.Context, _ agent.McpClient, messages []api.Message, opts *agent.GenerateOptions) (*agent.GenerateResult, error) {
 	text := "nothing to echo"
 	if len(messages) > 0 && len(messages[len(messages)-1].Parts) > 0 {
 		if tp, ok := messages[len(messages)-1].Parts[len(messages[len(messages)-1].Parts)-1].Part.(api.TextPart); ok {
@@ -18,6 +18,6 @@ func (lm EchoAgent) Generate(ctx context.Context, messages []api.Message, _ agen
 		}
 	}
 	return &agent.GenerateResult{
-		Parts: []api.UnionPart{{Part: api.NewTextPart(text)}},
+		Message: api.NewModelMessage([]api.UnionPart{{Part: api.NewTextPart(text)}}),
 	}, nil
 }

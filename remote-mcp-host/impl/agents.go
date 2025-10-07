@@ -16,6 +16,85 @@ type GeminiAgent struct {
 	opts   *GeminiOpts
 }
 
+func (a GeminiAgent) Act(ctx context.Context, client agent.McpClient, messages []api.Message, opts *agent.GenerateOptions) (*agent.GenerateResult, error) {
+
+	contents, err := messagesToGeminiContents(messages)
+	if err != nil {
+		return nil, err
+	}
+
+	serverTools, err := client.ListTools(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	tools := serverToolsToGeminiTools(serverTools)
+
+	var parts []api.UnionPart
+
+	res, err := a.client.Models.GenerateContent(ctx, a.opts.model, contents, &genai.GenerateContentConfig{
+		Tools: tools,
+	})
+	if err != nil {
+		var functionDeclarations []genai.FunctionDeclaration
+		for _, tool := range tools {
+			functionDeclarations = append(functionDeclarations, *tool.FunctionDeclarations[0])
+		}
+		return nil, fmt.Errorf("getting response form Gemini with contents %#v and tools %#v: %s", contents, functionDeclarations, err)
+	}
+
+	var fullText string
+	{
+		var bldr strings.Builder
+		for _, part := range res.Candidates[0].Content.Parts {
+			bldr.WriteString(part.Text)
+		}
+		fullText = bldr.String()
+	}
+
+	if len(fullText) > 0 {
+		parts = append(parts, api.UnionPart{Part: api.NewTextPart(fullText)})
+	}
+
+	for _, call := range res.FunctionCalls() {
+		toolRequest, err := geminiFunctionCallToServerToolRequest(call)
+		if err != nil {
+			return nil, err
+		}
+
+		res, err := client.CallTool(ctx, toolRequest)
+		if err != nil {
+			parts = append(parts, api.UnionPart{Part: api.NewToolUsePartError(toolRequest.Arguments, err.Error(), res.ToolId)})
+			continue
+		}
+		parts = append(parts, api.UnionPart{Part: api.NewToolUsePart(toolRequest.Arguments, res.Output, res.ToolId)})
+	}
+
+	return &agent.GenerateResult{
+		Message: api.NewModelMessage(parts),
+	}, nil
+}
+
+func NewGeminiAgent(ctx context.Context, opts *GeminiOpts) (*GeminiAgent, error) {
+
+	if opts == nil {
+		opts = &GeminiOpts{model: "gemini-2.0-flash"}
+	}
+
+	client, err := genai.NewClient(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	return &GeminiAgent{
+		client: client,
+		opts:   opts,
+	}, nil
+}
+
+type GeminiOpts struct {
+	model string
+}
+
 func messagesToGeminiContents(messages []api.Message) ([]*genai.Content, error) {
 
 	var contents []*genai.Content
@@ -85,74 +164,6 @@ func geminiFunctionCallToServerToolRequest(call *genai.FunctionCall) (*agent.Ser
 			Arguments: call.Args,
 		},
 	}, nil
-}
-
-func (a GeminiAgent) Generate(ctx context.Context, messages []api.Message, client agent.McpClient, opts *agent.GenerateOptions) (*agent.GenerateResult, error) {
-
-	contents, err := messagesToGeminiContents(messages)
-	if err != nil {
-		return nil, err
-	}
-
-	serverTools, err := client.ListTools(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	tools := serverToolsToGeminiTools(serverTools)
-
-	var parts []api.UnionPart
-
-	res, err := a.client.Models.GenerateContent(ctx, a.opts.model, contents, &genai.GenerateContentConfig{
-		Tools: tools,
-	})
-	if err != nil {
-		var functionDeclarations []genai.FunctionDeclaration
-		for _, tool := range tools {
-			functionDeclarations = append(functionDeclarations, *tool.FunctionDeclarations[0])
-		}
-		return nil, fmt.Errorf("getting response form Gemini with contents %#v and tools %#v: %s", contents, functionDeclarations, err)
-	}
-
-	parts = append(parts, api.UnionPart{Part: api.NewTextPart(res.Text())})
-
-	for _, call := range res.FunctionCalls() {
-		toolRequest, err := geminiFunctionCallToServerToolRequest(call)
-		if err != nil {
-			return nil, err
-		}
-
-		res, err := client.CallTool(ctx, toolRequest)
-		if err != nil {
-			parts = append(parts, api.UnionPart{Part: api.NewToolUsePartError(toolRequest.Arguments, err.Error(), res.ToolId)})
-			continue
-		}
-		parts = append(parts, api.UnionPart{Part: api.NewToolUsePart(toolRequest.Arguments, res.Output, res.ToolId)})
-	}
-
-	return &agent.GenerateResult{
-		Parts: parts,
-	}, nil
-}
-
-func NewGeminiAgent(ctx context.Context, opts *GeminiOpts) (*GeminiAgent, error) {
-
-	if opts == nil {
-		opts = &GeminiOpts{model: "gemini-2.0-flash"}
-	}
-
-	client, err := genai.NewClient(ctx, nil)
-	if err != nil {
-		return nil, err
-	}
-	return &GeminiAgent{
-		client: client,
-		opts:   opts,
-	}, nil
-}
-
-type GeminiOpts struct {
-	model string
 }
 
 func composeToolName(toolId api.ToolId) string {

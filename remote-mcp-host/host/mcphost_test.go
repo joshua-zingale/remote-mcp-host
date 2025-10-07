@@ -7,13 +7,11 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/joshua-zingale/remote-mcp-host/internal/testutil"
 )
 
 func TestNewMcpHost(t *testing.T) {
 	ctx := context.Background()
-	host, err := NewMcpHost(&testutil.EchoAgent{}, nil)
+	host, err := NewMcpHost(nil)
 
 	if err != nil {
 		t.Fatalf("could not create new host: %s", err)
@@ -30,7 +28,7 @@ func TestNewMcpHost(t *testing.T) {
 func TestMultipleServers(t *testing.T) {
 	ctx := context.Background()
 
-	host, _ := NewMcpHost(testutil.EchoAgent{}, nil)
+	host, _ := NewMcpHost(nil)
 	host.AddSessionsFromConfig(ctx, strings.NewReader("![../../test_servers/greetings][greeter-1] go run greetings.go\n![../../test_servers/greetings][greeter-2] go run greetings.go"), nil)
 
 	names := host.ListServerNames()
@@ -50,13 +48,13 @@ func TestMultipleServers(t *testing.T) {
 		t.Fatalf("greeter-2 not added to server properly")
 	}
 
-	session, _ := host.GetClientSession(ctx, "greeter-1")
+	session, _ := host.GetSession(ctx, "greeter-1")
 	tools, _ := session.ListTools(ctx, nil)
 	if tools.Tools[0].Name != "greet" {
 		t.Fatalf("greeter-1's tool not added")
 	}
 
-	session2, _ := host.GetClientSession(ctx, "greeter-2")
+	session2, _ := host.GetSession(ctx, "greeter-2")
 	tools2, _ := session2.ListTools(ctx, nil)
 	if tools2.Tools[0].Name != "greet" {
 		t.Fatalf("greeter-2's tool not added")
@@ -67,7 +65,7 @@ func TestMultipleServers(t *testing.T) {
 func TestHttpServer(t *testing.T) {
 	ctx := context.Background()
 
-	host, _ := NewMcpHost(testutil.EchoAgent{}, nil)
+	host, _ := NewMcpHost(nil)
 
 	cmd := exec.Command("go", "run", "httpmath.go")
 	cmd.Dir = "../../test_servers/httpmath/"
@@ -91,7 +89,7 @@ func TestHttpServer(t *testing.T) {
 		t.Fatalf("httpmath not added to server properly")
 	}
 
-	session, _ := host.GetClientSession(ctx, "httpmath")
+	session, _ := host.GetSession(ctx, "httpmath")
 	tools, _ := session.ListTools(ctx, nil)
 	if tools.Tools[0].Name != "add" {
 		t.Fatalf("greeter-1's tool not added")

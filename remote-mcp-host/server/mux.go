@@ -3,12 +3,13 @@ package server
 import (
 	"net/http"
 
+	"github.com/joshua-zingale/remote-mcp-host/remote-mcp-host/agent"
 	"github.com/joshua-zingale/remote-mcp-host/remote-mcp-host/api"
 	"github.com/joshua-zingale/remote-mcp-host/remote-mcp-host/host"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-func NewRemoteMcpMux(host *host.McpHost) *http.ServeMux {
+func NewRemoteMcpMux(host *host.McpHost, agent agent.Agent) *http.ServeMux {
 
 	if host == nil {
 		panic("The MCP Host cannot be a null pointer")
@@ -18,18 +19,26 @@ func NewRemoteMcpMux(host *host.McpHost) *http.ServeMux {
 
 	mux.HandleFunc("GET /servers", toJson(getServers, host, false))
 	mux.HandleFunc("GET /servers/{name}/tools", toJson(getServerTools, host, false))
-	mux.HandleFunc("POST /generations", toJson(postGenerations, host, true))
+	mux.HandleFunc("POST /generations", toJson(postGenerations, hostAndAgent{
+		host:  host,
+		agent: agent,
+	}, true))
 
 	return mux
 }
 
-func postGenerations(req api.GenerationRequest, host *host.McpHost, r *http.Request) (api.GenerationResponse, error) {
+func postGenerations(req api.GenerationRequest, hostAndAgent hostAndAgent, r *http.Request) (api.GenerationResponse, error) {
 
-	message, err := host.Generate(r.Context(), req.Messages, nil)
+	client, err := hostAndAgent.host.GetClient(r.Context(), nil)
 	if err != nil {
-		panic(err)
+		return api.GenerationResponse{}, err
 	}
-	return api.GenerationResponse{Message: *message}, err
+
+	res, err := hostAndAgent.agent.Act(r.Context(), client, req.Messages, nil)
+	if err != nil {
+		return api.GenerationResponse{}, err
+	}
+	return api.GenerationResponse{Message: *res.Message}, err
 }
 
 func getServers(_ noBody, host *host.McpHost, _ *http.Request) (api.McpServerList, error) {
@@ -44,7 +53,7 @@ func getServers(_ noBody, host *host.McpHost, _ *http.Request) (api.McpServerLis
 
 func getServerTools(_ interface{}, host *host.McpHost, r *http.Request) (api.ToolList, error) {
 	name := r.PathValue("name")
-	session, err := host.GetClientSession(r.Context(), name)
+	session, err := host.GetSession(r.Context(), name)
 	if err != nil {
 		return api.ToolList{}, err
 	}

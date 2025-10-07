@@ -145,6 +145,13 @@ func NewToolUsePartError(input any, errorText string, toolId ToolId) ToolUsePart
 	}
 }
 
+func NewModelMessage(parts []UnionPart) *Message {
+	return &Message{
+		Parts: parts,
+		Role:  "model",
+	}
+}
+
 func (t ToolUsePart) PartType() string {
 	return "tool-use"
 }

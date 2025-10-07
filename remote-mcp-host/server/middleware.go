@@ -4,6 +4,9 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+
+	"github.com/joshua-zingale/remote-mcp-host/remote-mcp-host/agent"
+	"github.com/joshua-zingale/remote-mcp-host/remote-mcp-host/host"
 )
 
 type noBody = bool
@@ -48,4 +51,9 @@ func toJson[Req any, Res any, Dat any](handler func(Req, Dat, *http.Request) (Re
 		}
 		w.Write(responseJson)
 	}
+}
+
+type hostAndAgent struct {
+	host  *host.McpHost
+	agent agent.Agent
 }

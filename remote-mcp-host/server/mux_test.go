@@ -17,10 +17,12 @@ import (
 func TestServerListing(t *testing.T) {
 	ctx := context.Background()
 
-	host, _ := host.NewMcpHost(&testutil.EchoAgent{}, nil)
+	host, _ := host.NewMcpHost(nil)
 	host.AddSessionsFromConfig(ctx, strings.NewReader("![../../test_servers/greetings][greetings] go run greetings.go"), nil)
+	agent := testutil.EchoAgent{}
 
-	mux := NewRemoteMcpMux(&host)
+	mux := NewRemoteMcpMux(&host, agent)
+
 	r := httptest.NewRequest("GET", "/servers", nil)
 	r.Header.Set("Accept", "application/json")
 	w := httptest.NewRecorder()
@@ -44,10 +46,11 @@ func TestServerListing(t *testing.T) {
 func TestServerGenerate(t *testing.T) {
 	ctx := context.Background()
 
-	host, _ := host.NewMcpHost(testutil.EchoAgent{}, nil)
+	host, _ := host.NewMcpHost(nil)
 	host.AddSessionsFromConfig(ctx, strings.NewReader("![../../test_servers/greetings][greetings] go run greetings.go"), nil)
+	agent := testutil.EchoAgent{}
 
-	mux := NewRemoteMcpMux(&host)
+	mux := NewRemoteMcpMux(&host, agent)
 
 	req, _ := json.Marshal(api.GenerationRequest{
 		Messages: []api.Message{{
