@@ -15,18 +15,16 @@ type Agent interface {
 	// If GenerateResult.Continue is set to true, the generate function
 	// may be called again before the new message is finalized and sent
 	// to the user
-	Generate(context.Context, []api.Message, *GenerateOptions) (*GenerateResult, error)
+	Generate(context.Context, []api.Message, McpClient, *GenerateOptions) (*GenerateResult, error)
 }
 
 type GenerateOptions struct {
+	_ bool
+}
 
-	// The list of tools that are available for the Agent.
-	Tools []*ServerTool
-
-	// The parts already generated for the response
-	// If this is non-empty, then the language model should continue
-	// to build on the parts.
-	GeneratedParts []api.UnionPart
+type McpClient interface {
+	CallTool(context.Context, *ServerToolRequest) (*api.ToolUsePart, error)
+	ListTools(context.Context) ([]*ServerTool, error)
 }
 
 type ServerTool struct {
@@ -35,12 +33,10 @@ type ServerTool struct {
 }
 
 type GenerateResult struct {
-	Parts        []api.UnionPart
-	ToolRequests []ToolRequest
-	Continue     bool
+	Parts []api.UnionPart
 }
 
-type ToolRequest struct {
+type ServerToolRequest struct {
 	ServerName string
 	mcp.CallToolParams
 }

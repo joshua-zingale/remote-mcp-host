@@ -50,13 +50,13 @@ func TestMultipleServers(t *testing.T) {
 		t.Fatalf("greeter-2 not added to server properly")
 	}
 
-	session, _ := host.GetClientSession("greeter-1")
+	session, _ := host.GetClientSession(ctx, "greeter-1")
 	tools, _ := session.ListTools(ctx, nil)
 	if tools.Tools[0].Name != "greet" {
 		t.Fatalf("greeter-1's tool not added")
 	}
 
-	session2, _ := host.GetClientSession("greeter-2")
+	session2, _ := host.GetClientSession(ctx, "greeter-2")
 	tools2, _ := session2.ListTools(ctx, nil)
 	if tools2.Tools[0].Name != "greet" {
 		t.Fatalf("greeter-2's tool not added")
@@ -91,7 +91,7 @@ func TestHttpServer(t *testing.T) {
 		t.Fatalf("httpmath not added to server properly")
 	}
 
-	session, _ := host.GetClientSession("httpmath")
+	session, _ := host.GetClientSession(ctx, "httpmath")
 	tools, _ := session.ListTools(ctx, nil)
 	if tools.Tools[0].Name != "add" {
 		t.Fatalf("greeter-1's tool not added")

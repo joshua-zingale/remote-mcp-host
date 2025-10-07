@@ -16,7 +16,7 @@ type GeminiAgent struct {
 	opts   *GeminiOpts
 }
 
-func (a GeminiAgent) Generate(ctx context.Context, messages []api.Message, opts *agent.GenerateOptions) (*agent.GenerateResult, error) {
+func messagesToGeminiContents(messages []api.Message) ([]*genai.Content, error) {
 
 	var contents []*genai.Content
 
@@ -49,30 +49,89 @@ func (a GeminiAgent) Generate(ctx context.Context, messages []api.Message, opts 
 		})
 	}
 
-	res, err := a.client.Models.GenerateContent(ctx, a.opts.model, contents, &genai.GenerateContentConfig{})
+	return contents, nil
+}
+
+func serverToolToGeminiTool(serverTool *agent.ServerTool) *genai.Tool {
+	return &genai.Tool{
+		FunctionDeclarations: []*genai.FunctionDeclaration{{
+			Description: serverTool.Description,
+			Name: composeToolName(
+				api.ToolId{Name: serverTool.Name, ServerName: serverTool.ServerName}),
+			ParametersJsonSchema: serverTool.InputSchema,
+			ResponseJsonSchema:   serverTool.OutputSchema}}}
+}
+
+func serverToolsToGeminiTools(serverTools []*agent.ServerTool) []*genai.Tool {
+	var tools []*genai.Tool
+
+	for _, t := range serverTools {
+		tools = append(tools, serverToolToGeminiTool(t))
+	}
+
+	return tools
+}
+
+func geminiFunctionCallToServerToolRequest(call *genai.FunctionCall) (*agent.ServerToolRequest, error) {
+
+	toolId, err := toolIdFromCompositeName(call.Name)
+	if err != nil {
+		return nil, fmt.Errorf("syntactically invalid toolId used '%s'", call.Name)
+	}
+	return &agent.ServerToolRequest{
+		ServerName: toolId.ServerName,
+		CallToolParams: mcp.CallToolParams{
+			Name:      toolId.Name,
+			Arguments: call.Args,
+		},
+	}, nil
+}
+
+func (a GeminiAgent) Generate(ctx context.Context, messages []api.Message, client agent.McpClient, opts *agent.GenerateOptions) (*agent.GenerateResult, error) {
+
+	contents, err := messagesToGeminiContents(messages)
 	if err != nil {
 		return nil, err
 	}
 
-	var toolRequests []agent.ToolRequest
-	for _, call := range res.FunctionCalls() {
-		toolId, err := toolIdFromCompositeName(call.Name)
-		if err != nil {
-			return nil, fmt.Errorf("syntactically invalid toolId used '%s'", call.Name)
+	serverTools, err := client.ListTools(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	tools := serverToolsToGeminiTools(serverTools)
+
+	var parts []api.UnionPart
+
+	res, err := a.client.Models.GenerateContent(ctx, a.opts.model, contents, &genai.GenerateContentConfig{
+		Tools: tools,
+	})
+	if err != nil {
+		var functionDeclarations []genai.FunctionDeclaration
+		for _, tool := range tools {
+			functionDeclarations = append(functionDeclarations, *tool.FunctionDeclarations[0])
 		}
-		toolRequests = append(toolRequests, agent.ToolRequest{
-			ServerName: toolId.ServerName,
-			CallToolParams: mcp.CallToolParams{
-				Name:      toolId.Name,
-				Arguments: call.Args,
-			},
-		})
+		return nil, fmt.Errorf("getting response form Gemini with contents %#v and tools %#v: %s", contents, functionDeclarations, err)
+	}
+
+	parts = append(parts, api.UnionPart{Part: api.NewTextPart(res.Text())})
+
+	for _, call := range res.FunctionCalls() {
+		toolRequest, err := geminiFunctionCallToServerToolRequest(call)
+		if err != nil {
+			return nil, err
+		}
+
+		res, err := client.CallTool(ctx, toolRequest)
+		if err != nil {
+			parts = append(parts, api.UnionPart{Part: api.NewToolUsePartError(toolRequest.Arguments, err.Error(), res.ToolId)})
+			continue
+		}
+		parts = append(parts, api.UnionPart{Part: api.NewToolUsePart(toolRequest.Arguments, res.Output, res.ToolId)})
 	}
 
 	return &agent.GenerateResult{
-		Parts:        []api.UnionPart{{Part: api.NewTextPart(res.Text())}},
-		ToolRequests: toolRequests,
-		Continue:     false,
+		Parts: parts,
 	}, nil
 }
 
@@ -97,13 +156,13 @@ type GeminiOpts struct {
 }
 
 func composeToolName(toolId api.ToolId) string {
-	return toolId.ServerName + "/" + toolId.Name
+	return toolId.ServerName + "." + toolId.Name
 }
 
 func toolIdFromCompositeName(name string) (*api.ToolId, error) {
-	parts := strings.Split(name, "/")
+	parts := strings.Split(name, ".")
 	if len(parts) != 2 || len(parts[0]) == 0 || len(parts[1]) == 0 {
-		return nil, fmt.Errorf("Invalid composite tool name '%s', name")
+		return nil, fmt.Errorf("invalid composite tool name '%s'", name)
 	}
 	return &api.ToolId{
 		ServerName: parts[0],

@@ -33,7 +33,7 @@ func InputPingPangPong(ctx context.Context, req *mcp.CallToolRequest, input Inpu
 
 func main() {
 	server := mcp.NewServer(&mcp.Implementation{Name: "sampling", Version: "v1.0.0"}, nil)
-	mcp.AddTool(server, &mcp.Tool{Name: "input ping", Description: "pings some pongs"}, InputPingPangPong)
+	mcp.AddTool(server, &mcp.Tool{Name: "inputping", Description: "pings some pongs"}, InputPingPangPong)
 	if err := server.Run(context.Background(), &mcp.StdioTransport{}); err != nil {
 		log.Fatal(err)
 	}

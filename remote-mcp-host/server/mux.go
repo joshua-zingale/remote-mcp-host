@@ -26,8 +26,10 @@ func NewRemoteMcpMux(host *host.McpHost) *http.ServeMux {
 func postGenerations(req api.GenerationRequest, host *host.McpHost, r *http.Request) (api.GenerationResponse, error) {
 
 	message, err := host.Generate(r.Context(), req.Messages, nil)
-
-	return api.GenerationResponse{Message: message}, err
+	if err != nil {
+		panic(err)
+	}
+	return api.GenerationResponse{Message: *message}, err
 }
 
 func getServers(_ noBody, host *host.McpHost, _ *http.Request) (api.McpServerList, error) {
@@ -42,7 +44,7 @@ func getServers(_ noBody, host *host.McpHost, _ *http.Request) (api.McpServerLis
 
 func getServerTools(_ interface{}, host *host.McpHost, r *http.Request) (api.ToolList, error) {
 	name := r.PathValue("name")
-	session, err := host.GetClientSession(name)
+	session, err := host.GetClientSession(r.Context(), name)
 	if err != nil {
 		return api.ToolList{}, err
 	}

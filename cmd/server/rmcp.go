@@ -14,18 +14,18 @@ func main() {
 
 	ctx := context.Background()
 
-	client, err := impl.NewGeminiAgent(ctx, nil)
+	agent, err := impl.NewGeminiAgent(ctx, nil)
 
 	if err != nil {
 		panic(err)
 	}
 
-	McpHost, err := host.NewMcpHost(client, nil)
+	McpHost, err := host.NewMcpHost(agent, nil)
 	if err != nil {
 		panic(err)
 	}
 
-	McpHost.AddSessionsFromConfig(ctx, strings.NewReader("![./test_servers/greetings][greetings] go run greetings.go\n![./test_servers/sampling][sampling] go run sampling.go"), nil)
+	McpHost.AddSessionsFromConfig(ctx, strings.NewReader("![./test_servers/greetings][greetings] go run greetings.go"), nil)
 
 	mux := server.NewRemoteMcpMux(&McpHost)
 
