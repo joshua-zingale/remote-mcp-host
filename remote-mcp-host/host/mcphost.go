@@ -9,6 +9,7 @@ import (
 	"log"
 	"os/exec"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/joshua-zingale/remote-mcp-host/remote-mcp-host/agent"
@@ -179,7 +180,9 @@ func (hmc HostMcpClient) ListTools(ctx context.Context) ([]*agent.ServerTool, er
 		if config == nil && !hmc.onlyUseConfiguredTools {
 			serverTools = append(serverTools, tool)
 		} else if config != nil {
+			fmt.Printf("%+v\n", *tool)
 			serverTools = append(serverTools, patchTool(tool, config.ToolPatch))
+			fmt.Printf("%+v\n", *patchTool(tool, config.ToolPatch))
 		}
 
 	}
@@ -210,11 +213,38 @@ func patchTool(tool *agent.ServerTool, patch api.ToolPatch) *agent.ServerTool {
 		return &patchedTool
 	}
 
+	var patchedParams []string
+	for paramName := range patch.Input {
+		patchedParams = append(patchedParams, paramName)
+	}
+
 	if hash, ok := patchedTool.InputSchema.(map[string]any); ok {
-		for key := range patch.Input {
-			delete(hash, key)
+		if properties, ok := hash["properties"]; ok {
+			if propertiesMap, ok := properties.(map[string]any); ok {
+				for key := range patch.Input {
+					fmt.Println("Deleting ", key)
+					delete(propertiesMap, key)
+				}
+			}
+		}
+
+		if required, ok := hash["required"]; ok {
+			fmt.Println("Has required")
+			if requiredList, ok := required.([]string); ok {
+				fmt.Println("Has requiredList")
+				newList := make([]string, len(requiredList))
+				for _, requirement := range requiredList {
+
+					if !slices.Contains(patchedParams, requirement) {
+						fmt.Println("Keeping ", requirement)
+						newList = append(newList, requirement)
+					}
+				}
+				hash["required"] = newList
+			}
 		}
 		patchedTool.InputSchema = hash
+
 	} else {
 		log.Printf("Warning: could not patch InputSchema because it was not map[string]any")
 	}
