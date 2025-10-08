@@ -91,7 +91,7 @@ func (a GeminiAgent) generate(ctx context.Context, client agent.McpClient, messa
 	}
 
 	if len(fullText) > 0 {
-		parts = append(parts, api.UnionPart{Part: api.NewTextPart(fullText)})
+		parts = append(parts, api.ToUnion(api.NewTextPart(fullText)))
 	}
 
 	numToolsCalled := 0
@@ -104,10 +104,10 @@ func (a GeminiAgent) generate(ctx context.Context, client agent.McpClient, messa
 
 		res, err := client.CallTool(ctx, toolRequest)
 		if err != nil {
-			parts = append(parts, api.UnionPart{Part: api.NewToolUsePartError(toolRequest.Arguments, err.Error(), res.ToolId)})
+			parts = append(parts, api.ToUnion(api.NewToolUsePartError(toolRequest.Arguments, err.Error(), res.ToolId)))
 			continue
 		}
-		parts = append(parts, api.UnionPart{Part: api.NewToolUsePart(toolRequest.Arguments, res.Output, res.ToolId)})
+		parts = append(parts, api.ToUnion(api.NewToolUsePart(toolRequest.Arguments, res.Output, res.ToolId)))
 	}
 
 	return &geminiGenerateResult{

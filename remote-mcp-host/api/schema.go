@@ -109,6 +109,10 @@ func NewRole(role string) (RoleType, error) {
 	}
 }
 
+func ToUnion(part Part) UnionPart {
+	return UnionPart{Part: part}
+}
+
 func NewTextPart(text string) TextPart {
 	return TextPart{
 		Text: text,
