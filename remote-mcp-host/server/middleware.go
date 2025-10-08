@@ -36,11 +36,7 @@ func toJson[Req any, Res any, Dat any](handler func(Req, Dat, *http.Request) (Re
 
 		responseObject, err := handler(requestObject, data, r)
 		if err != nil {
-			errorMessage, err := json.Marshal(map[string]string{"error": err.Error()})
-			if err != nil {
-				http.Error(w, "Internal Error: could not marshal error message", http.StatusInternalServerError)
-			}
-			w.Write(errorMessage)
+			http.Error(w, err.Error(), 400)
 			return
 		}
 

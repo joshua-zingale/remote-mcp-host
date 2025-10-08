@@ -16,9 +16,51 @@ type GeminiAgent struct {
 	opts   *GeminiOpts
 }
 
-func (a GeminiAgent) Act(ctx context.Context, client agent.McpClient, messages []api.Message, opts *agent.GenerateOptions) (*agent.GenerateResult, error) {
+var GEMINI_MAX_REQUESTS_PER_ACT int = 3
 
-	contents, err := messagesToGeminiContents(messages)
+func (a GeminiAgent) Act(ctx context.Context, client agent.McpClient, messages []api.Message, opts *agent.GenerateOptions) (*agent.GenerateResult, error) {
+	var generatedParts []api.UnionPart
+	res, err := a.generate(ctx, client, messages, []api.UnionPart{}, &geminiConfig{})
+	if err != nil {
+		return nil, err
+	}
+	generatedParts = append(generatedParts, res.Parts...)
+
+	for i := 1; i < GEMINI_MAX_REQUESTS_PER_ACT && res.NumToolsCalled > 0; i++ {
+
+		if i == GEMINI_MAX_REQUESTS_PER_ACT-1 {
+			res, err = a.generate(ctx, nullClient{}, messages, generatedParts, &geminiConfig{
+				SystemInstruction: "The Responses from the tool calls are not visible to the user. Continue your response to the user based on the tool results in natural language. You must conclude your message to the user with this message.",
+			})
+		} else {
+			res, err = a.generate(ctx, client, messages, generatedParts, &geminiConfig{
+				SystemInstruction: "The Responses from the tool calls are not visible to the user. Continue your response to the user based on the tool results in natural language. You may call additional tools, but only if necessary.",
+			})
+		}
+
+		if err != nil {
+			return nil, err
+		}
+
+		generatedParts = append(generatedParts, res.Parts...)
+	}
+
+	return &agent.GenerateResult{
+		Message: api.NewModelMessage(generatedParts),
+	}, nil
+}
+
+func (a GeminiAgent) generate(ctx context.Context, client agent.McpClient, messages []api.Message, ammendedParts []api.UnionPart, config *geminiConfig) (*geminiGenerateResult, error) {
+	if config == nil {
+		config = &geminiConfig{}
+	}
+
+	combinedMessages := messages
+	if len(ammendedParts) > 0 {
+		combinedMessages = append(messages, *api.NewModelMessage(ammendedParts))
+
+	}
+	contents, err := messagesToGeminiContents(combinedMessages)
 	if err != nil {
 		return nil, err
 	}
@@ -30,18 +72,14 @@ func (a GeminiAgent) Act(ctx context.Context, client agent.McpClient, messages [
 
 	tools := serverToolsToGeminiTools(serverTools)
 
-	var parts []api.UnionPart
-
 	res, err := a.client.Models.GenerateContent(ctx, a.opts.model, contents, &genai.GenerateContentConfig{
 		Tools: tools,
 	})
 	if err != nil {
-		var functionDeclarations []genai.FunctionDeclaration
-		for _, tool := range tools {
-			functionDeclarations = append(functionDeclarations, *tool.FunctionDeclarations[0])
-		}
-		return nil, fmt.Errorf("getting response form Gemini with contents %#v and tools %#v: %s", contents, functionDeclarations, err)
+		return nil, fmt.Errorf("getting response from Gemini: %s", err)
 	}
+
+	var parts []api.UnionPart
 
 	var fullText string
 	{
@@ -56,7 +94,9 @@ func (a GeminiAgent) Act(ctx context.Context, client agent.McpClient, messages [
 		parts = append(parts, api.UnionPart{Part: api.NewTextPart(fullText)})
 	}
 
+	numToolsCalled := 0
 	for _, call := range res.FunctionCalls() {
+		numToolsCalled += 1
 		toolRequest, err := geminiFunctionCallToServerToolRequest(call)
 		if err != nil {
 			return nil, err
@@ -70,9 +110,19 @@ func (a GeminiAgent) Act(ctx context.Context, client agent.McpClient, messages [
 		parts = append(parts, api.UnionPart{Part: api.NewToolUsePart(toolRequest.Arguments, res.Output, res.ToolId)})
 	}
 
-	return &agent.GenerateResult{
-		Message: api.NewModelMessage(parts),
+	return &geminiGenerateResult{
+		Parts:          parts,
+		NumToolsCalled: numToolsCalled,
 	}, nil
+}
+
+type geminiGenerateResult struct {
+	Parts          []api.UnionPart
+	NumToolsCalled int
+}
+
+type geminiConfig struct {
+	SystemInstruction string
 }
 
 func NewGeminiAgent(ctx context.Context, opts *GeminiOpts) (*GeminiAgent, error) {
@@ -93,6 +143,16 @@ func NewGeminiAgent(ctx context.Context, opts *GeminiOpts) (*GeminiAgent, error)
 
 type GeminiOpts struct {
 	model string
+}
+
+type nullClient struct{}
+
+func (n nullClient) ListTools(ctx context.Context) ([]*agent.ServerTool, error) {
+	return []*agent.ServerTool{}, nil
+}
+
+func (n nullClient) CallTool(ctx context.Context, toolRequest *agent.ServerToolRequest) (*api.ToolUsePart, error) {
+	return nil, fmt.Errorf("no tools are available")
 }
 
 func messagesToGeminiContents(messages []api.Message) ([]*genai.Content, error) {
@@ -117,15 +177,31 @@ func messagesToGeminiContents(messages []api.Message) ([]*genai.Content, error) 
 				if !ok {
 					return nil, fmt.Errorf("invalid type for output arguments of tool use '%v'", part.Output.StructuredContent)
 				}
-				parts = append(parts, genai.NewPartFromFunctionCall(name, args), genai.NewPartFromFunctionResponse(name, output))
+				parts = append(parts, genai.NewPartFromFunctionCall(name, args))
+				contents = append(contents, &genai.Content{
+					Parts: parts,
+					Role:  message.Role,
+				})
+
+				parts = make([]*genai.Part, 0)
+
+				contents = append(contents, &genai.Content{
+					Parts: []*genai.Part{genai.NewPartFromFunctionResponse(name, output)},
+					Role:  "user",
+				})
+
 			default:
 				return nil, fmt.Errorf("invalid part type '%v'", part)
 			}
 		}
-		contents = append(contents, &genai.Content{
-			Parts: parts,
-			Role:  message.Role,
-		})
+
+		if len(parts) > 0 {
+			contents = append(contents, &genai.Content{
+				Parts: parts,
+				Role:  message.Role,
+			})
+		}
+
 	}
 
 	return contents, nil
