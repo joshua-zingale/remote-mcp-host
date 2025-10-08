@@ -11,8 +11,9 @@ type ClientOptions struct {
 }
 
 type HostMcpClient struct {
-	host *McpHost
-	opts *ClientOptions
+	host                   *McpHost
+	onlyUseConfiguredTools bool
+	toolConfigs            map[api.ToolId]api.ToolConfig
 }
 
 type clientSessionWithName struct {

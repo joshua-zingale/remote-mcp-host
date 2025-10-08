@@ -31,7 +31,18 @@ func (h *McpHost) GetClient(ctx context.Context, opts *ClientOptions) (agent.Mcp
 	if opts == nil {
 		opts = &ClientOptions{}
 	}
-	return HostMcpClient{host: h, opts: opts}, nil
+
+	toolConfigs := make(map[api.ToolId]api.ToolConfig)
+
+	for _, cfg := range opts.ToolConfigs {
+		toolConfigs[cfg.ToolId] = *cfg
+	}
+
+	return HostMcpClient{
+		host:                   h,
+		onlyUseConfiguredTools: opts.OnlyUseConfiguredTools,
+		toolConfigs:            toolConfigs,
+	}, nil
 }
 
 // Opens MCP sessions with servers for this host.
@@ -121,14 +132,11 @@ func (hmc HostMcpClient) CallTool(ctx context.Context, toolRequest *agent.Server
 	toolRequestId := api.ToolId{ServerName: toolRequest.ServerName, Name: toolRequest.Name}
 	var config *api.ToolConfig = nil
 
-	for _, toolConfig := range hmc.opts.ToolConfigs {
-		if toolConfig.ToolId == toolRequestId {
-			config = toolConfig
-			break
-		}
+	if cfg, ok := hmc.toolConfigs[toolRequestId]; ok {
+		config = &cfg
 	}
 
-	if hmc.opts.OnlyUseConfiguredTools && config == nil {
+	if hmc.onlyUseConfiguredTools && config == nil {
 		return nil, fmt.Errorf("invalid ToolId")
 	} else if config == nil {
 		config = &api.ToolConfig{ToolId: toolRequestId, ToolPatch: api.ToolPatch{Input: nil}}
@@ -163,20 +171,18 @@ func (hmc HostMcpClient) ListTools(ctx context.Context) ([]*agent.ServerTool, er
 			return serverTools, err
 		}
 
-		found := false
-		for _, toolConfig := range hmc.opts.ToolConfigs {
-			if tool.Name == toolConfig.ToolId.Name && tool.ServerName == toolConfig.ToolId.ServerName {
-				serverTools = append(serverTools, tool)
-				found = true
-				break
-			}
+		var config *api.ToolConfig
+		if cfg, ok := hmc.toolConfigs[*tool.ToolId()]; ok {
+			config = &cfg
 		}
-		if !found && !hmc.opts.OnlyUseConfiguredTools {
+
+		if config == nil && !hmc.onlyUseConfiguredTools {
 			serverTools = append(serverTools, tool)
+		} else if config != nil {
+			serverTools = append(serverTools, patchTool(tool, config.ToolPatch))
 		}
 
 	}
-
 	return serverTools, nil
 }
 
@@ -197,7 +203,7 @@ func patchToolRequest(toolRequest *agent.ServerToolRequest, patch api.ToolPatch)
 	return &patchedReq
 }
 
-func patchTool(tool *mcp.Tool, patch api.ToolPatch) *mcp.Tool {
+func patchTool(tool *agent.ServerTool, patch api.ToolPatch) *agent.ServerTool {
 	patchedTool := *tool
 
 	if patch.Input == nil {
@@ -208,6 +214,7 @@ func patchTool(tool *mcp.Tool, patch api.ToolPatch) *mcp.Tool {
 		for key := range patch.Input {
 			delete(hash, key)
 		}
+		patchedTool.InputSchema = hash
 	} else {
 		log.Printf("Warning: could not patch InputSchema because it was not map[string]any")
 	}
