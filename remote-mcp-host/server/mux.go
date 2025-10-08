@@ -29,7 +29,15 @@ func NewRemoteMcpMux(host *host.McpHost, agent agent.Agent) *http.ServeMux {
 
 func postGenerations(req api.GenerationRequest, hostAndAgent hostAndAgent, r *http.Request) (api.GenerationResponse, error) {
 
-	client, err := hostAndAgent.host.GetClient(r.Context(), nil)
+	var toolConfigs []*api.ToolConfig
+
+	for _, conf := range req.ToolConfigs {
+		toolConfigs = append(toolConfigs, &conf)
+	}
+
+	client, err := hostAndAgent.host.GetClient(r.Context(), &host.ClientOptions{
+		ToolConfigs: toolConfigs,
+	})
 	if err != nil {
 		return api.GenerationResponse{}, err
 	}

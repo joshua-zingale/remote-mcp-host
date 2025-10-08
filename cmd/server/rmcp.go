@@ -19,7 +19,7 @@ func main() {
 		panic(err)
 	}
 
-	err = McpHost.AddSessionsFromConfig(ctx, strings.NewReader("![./test_servers/greetings][greetings] go run greetings.go"), nil)
+	err = McpHost.AddSessionsFromConfig(ctx, strings.NewReader("![./test_servers/greetings][greetings] go run greetings.go\n>[math]http://127.0.0.1:8080"), nil)
 	if err != nil {
 		panic(err)
 	}

@@ -56,7 +56,7 @@ interface ToolId {
 }
 
 interface GenerationRequest {
-    availableTools?: ToolId[] // If specified, limits the tools that can be used
+    toolConfigs?: ToolId[] // If specified, limits the tools that can be used
     messages: Message[]
 }
 

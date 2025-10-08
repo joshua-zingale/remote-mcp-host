@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"iter"
+	"log"
 	"os/exec"
 	"regexp"
 	"strings"
@@ -29,14 +30,6 @@ func NewMcpHost(_ *McpHostOptions) (McpHost, error) {
 func (h *McpHost) GetClient(ctx context.Context, opts *ClientOptions) (agent.McpClient, error) {
 	if opts == nil {
 		opts = &ClientOptions{}
-	}
-
-	if opts.AvailableTools == nil {
-		allTools, err := h.allTools(ctx)
-		if err != nil {
-			return nil, err
-		}
-		opts.AvailableTools = allTools
 	}
 	return HostMcpClient{host: h, opts: opts}, nil
 }
@@ -124,12 +117,29 @@ func (h *McpHost) ListToolsOnServer(ctx context.Context, serverName string) ([]m
 }
 
 func (hmc HostMcpClient) CallTool(ctx context.Context, toolRequest *agent.ServerToolRequest) (*api.ToolUsePart, error) {
+
+	toolRequestId := api.ToolId{ServerName: toolRequest.ServerName, Name: toolRequest.Name}
+	var config *api.ToolConfig = nil
+
+	for _, toolConfig := range hmc.opts.ToolConfigs {
+		if toolConfig.ToolId == toolRequestId {
+			config = toolConfig
+			break
+		}
+	}
+
+	if hmc.opts.OnlyUseConfiguredTools && config == nil {
+		return nil, fmt.Errorf("invalid ToolId")
+	} else if config == nil {
+		config = &api.ToolConfig{ToolId: toolRequestId, ToolPatch: api.ToolPatch{Input: nil}}
+	}
+
 	session, err := hmc.host.GetSession(ctx, toolRequest.ServerName)
 	if err != nil {
 		return nil, fmt.Errorf("could not connect to session '%s': %s", toolRequest.ServerName, err)
 	}
 
-	res, err := session.CallTool(ctx, &toolRequest.CallToolParams)
+	res, err := session.CallTool(ctx, &patchToolRequest(toolRequest, config.ToolPatch).CallToolParams)
 	if err != nil {
 		return nil, fmt.Errorf("error calling tool '%s': %s", toolRequest.Name, err)
 	}
@@ -153,31 +163,55 @@ func (hmc HostMcpClient) ListTools(ctx context.Context) ([]*agent.ServerTool, er
 			return serverTools, err
 		}
 
-		for _, toolConfig := range hmc.opts.AvailableTools {
+		found := false
+		for _, toolConfig := range hmc.opts.ToolConfigs {
 			if tool.Name == toolConfig.ToolId.Name && tool.ServerName == toolConfig.ToolId.ServerName {
 				serverTools = append(serverTools, tool)
+				found = true
 				break
 			}
 		}
+		if !found && !hmc.opts.OnlyUseConfiguredTools {
+			serverTools = append(serverTools, tool)
+		}
+
 	}
+
 	return serverTools, nil
 }
 
-func (h *McpHost) allTools(ctx context.Context) ([]*api.ToolConfig, error) {
-	var availableTools []*api.ToolConfig
+func patchToolRequest(toolRequest *agent.ServerToolRequest, patch api.ToolPatch) *agent.ServerToolRequest {
+	patchedReq := *toolRequest
 
-	for tool, err := range h.Tools(ctx) {
-		if err != nil {
-			return availableTools, err
-		}
-		availableTools = append(availableTools, &api.ToolConfig{
-			ToolId: api.ToolId{
-				ServerName: tool.ServerName,
-				Name:       tool.Name,
-			}})
+	if patch.Input == nil {
+		return &patchedReq
 	}
 
-	return availableTools, nil
+	if hash, ok := patchedReq.Arguments.(map[string]any); ok {
+		for key, val := range patch.Input {
+			hash[key] = val
+		}
+	} else {
+		patchedReq.Arguments = patch.Input
+	}
+	return &patchedReq
+}
+
+func patchTool(tool *mcp.Tool, patch api.ToolPatch) *mcp.Tool {
+	patchedTool := *tool
+
+	if patch.Input == nil {
+		return &patchedTool
+	}
+
+	if hash, ok := patchedTool.InputSchema.(map[string]any); ok {
+		for key := range patch.Input {
+			delete(hash, key)
+		}
+	} else {
+		log.Printf("Warning: could not patch InputSchema because it was not map[string]any")
+	}
+	return &patchedTool
 }
 
 func loadSessionsFromConfig(client *mcp.Client, ctx context.Context, r io.Reader) (map[string]*mcp.ClientSession, error) {

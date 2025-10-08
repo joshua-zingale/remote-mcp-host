@@ -45,14 +45,28 @@ type ToolId struct {
 	ServerName string `json:"serverName"`
 }
 
+type ToolPatch struct {
+	// If non-nil, overwrites conflicting portions of the Input for this
+	// with values specified here.
+	// For example, setting Input = map[string]int{"a": 3} will force
+	// the argument for "a" always to be 3.
+	// The actual input is overwritten where it diverges from the
+	// Input specified here. In the previous example, other
+	// input values beside "a" would be unchanged.
+	//
+	// Setting this will also remove any specified arguments from the Schema.
+	Input map[string]any `json:"Input,omitempty"`
+}
+
 type ToolConfig struct {
-	ToolId ToolId `json:"toolId"`
-	// Arguments any    `json:"arguments"`
+	ToolId    ToolId    `json:"toolId"`
+	ToolPatch ToolPatch `json:"toolPatch,omitempty"`
 }
 
 type GenerationRequest struct {
-	AvailableTools []ToolConfig `json:"availableTools,omitempty"`
-	Messages       []Message    `json:"messages"`
+	ToolConfigs            []ToolConfig `json:"toolConfigs,omitempty"`
+	Messages               []Message    `json:"messages"`
+	OnlyUseConfiguredTools bool         `json:"onlyIncludeConfiguredTools,omitempty"`
 }
 
 type GenerationResponse struct {

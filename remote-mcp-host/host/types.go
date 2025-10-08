@@ -6,7 +6,8 @@ import (
 )
 
 type ClientOptions struct {
-	AvailableTools []*api.ToolConfig
+	ToolConfigs            []*api.ToolConfig
+	OnlyUseConfiguredTools bool
 }
 
 type HostMcpClient struct {
