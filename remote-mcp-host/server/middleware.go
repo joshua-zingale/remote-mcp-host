@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/joshua-zingale/remote-mcp-host/remote-mcp-host/agent"
 	"github.com/joshua-zingale/remote-mcp-host/remote-mcp-host/host"
@@ -18,8 +19,8 @@ func toJson[Req any, Res any, Dat any](handler func(Req, Dat, *http.Request) (Re
 			http.Error(w, "Unsupported media type: Expected Content-Type: application/json", http.StatusUnsupportedMediaType)
 			return
 		}
-		if at := r.Header.Get("Accept"); at != "application/json" && at != "*/*" {
-			http.Error(w, "Unsupported media type: Expected Accept: application/json", http.StatusUnsupportedMediaType)
+		if at := r.Header.Get("Accept"); !strings.Contains(at, "application/json") && !strings.Contains(at, "*/*") {
+			http.Error(w, "Not Acceptable: Expected Accept: application/json", http.StatusNotAcceptable)
 			return
 		}
 
@@ -28,7 +29,7 @@ func toJson[Req any, Res any, Dat any](handler func(Req, Dat, *http.Request) (Re
 		var requestObject Req
 		if _, noBody := any(requestObject).(noBody); !noBody {
 			if err := json.NewDecoder(r.Body).Decode(&requestObject); err != nil {
-				log.Printf("Invalid data to be marshaled: %s", err.Error())
+				log.Printf("Cpuld not decode data: %s", err.Error())
 				http.Error(w, "Could not parse request body.", 400)
 				return
 			}
@@ -42,6 +43,7 @@ func toJson[Req any, Res any, Dat any](handler func(Req, Dat, *http.Request) (Re
 
 		responseJson, err := json.Marshal(responseObject)
 		if err != nil {
+			log.Printf("Invalid data to be marshaled: %s", err.Error())
 			http.Error(w, "Internal Error: could not marshal output data", http.StatusInternalServerError)
 			return
 		}
