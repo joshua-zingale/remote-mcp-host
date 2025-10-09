@@ -20,7 +20,7 @@ func SayHi(ctx context.Context, req *mcp.CallToolRequest, input Input) (
 	Output,
 	error,
 ) {
-	return nil, Output{Greeting: "Hi " + input.Name}, nil
+	return nil, Output{Greeting: "Salutations, " + input.Name + "."}, nil
 }
 
 func main() {

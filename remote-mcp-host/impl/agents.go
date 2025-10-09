@@ -104,7 +104,7 @@ func (a GeminiAgent) generate(ctx context.Context, client agent.McpClient, messa
 
 		res, err := client.CallTool(ctx, toolRequest)
 		if err != nil {
-			parts = append(parts, api.ToUnion(api.NewToolUsePartError(toolRequest.Arguments, err.Error(), res.ToolId)))
+			parts = append(parts, api.ToUnion(api.NewToolUsePartError(toolRequest.Arguments, err.Error(), *toolRequest.ToolId())))
 			continue
 		}
 		parts = append(parts, api.ToUnion(api.NewToolUsePart(toolRequest.Arguments, res.Output, res.ToolId)))
@@ -175,7 +175,7 @@ func messagesToGeminiContents(messages []api.Message) ([]*genai.Content, error) 
 				}
 				output, ok := part.Output.StructuredContent.(map[string]any)
 				if !ok {
-					return nil, fmt.Errorf("invalid type for output arguments of tool use '%v'", part.Output.StructuredContent)
+					output = map[string]any{"error": part.Error}
 				}
 				parts = append(parts, genai.NewPartFromFunctionCall(name, args))
 				contents = append(contents, &genai.Content{

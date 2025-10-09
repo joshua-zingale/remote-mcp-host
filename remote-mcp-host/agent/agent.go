@@ -40,3 +40,7 @@ type ServerToolRequest struct {
 	ServerName string
 	mcp.CallToolParams
 }
+
+func (st *ServerToolRequest) ToolId() *api.ToolId {
+	return &api.ToolId{ServerName: st.ServerName, Name: st.Name}
+}
