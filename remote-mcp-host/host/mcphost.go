@@ -180,9 +180,7 @@ func (hmc HostMcpClient) ListTools(ctx context.Context) ([]*agent.ServerTool, er
 		if config == nil && !hmc.onlyUseConfiguredTools {
 			serverTools = append(serverTools, tool)
 		} else if config != nil {
-			fmt.Printf("%+v\n", *tool)
 			serverTools = append(serverTools, patchTool(tool, config.ToolPatch))
-			fmt.Printf("%+v\n", *patchTool(tool, config.ToolPatch))
 		}
 
 	}
